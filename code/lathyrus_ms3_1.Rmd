@@ -28,6 +28,8 @@ library(effects)
 library(broom)
 library(car)
 library(grid)
+library(blme)
+library(RColorBrewer)
 ```
 
 ```{r Define ggplot themes, include=FALSE}
@@ -105,14 +107,15 @@ data_selag<-data_selag%>%
   mutate(fruit_set=n_fr/n_fl,seed_set=ifelse(fruit_set==0,0,n_seeds/n_ovules),
          n_seeds_per_fr=ifelse(fruit_set==0,0,n_seeds/n_fr),
          n_seeds_per_fl=n_seeds/n_fl,
-         prop_pred_seeds=ifelse(n_seeds==0,0,(n_seeds-n_intact_seeds)/n_seeds))
+         prop_seeds_esc=ifelse(n_seeds==0,NA,1-((n_seeds-n_intact_seeds)/n_seeds)),
+         n_pred_seeds=n_seeds-n_intact_seeds)
 ```
 
 # Histograms for interaction variables
 
 ```{r echo=FALSE, fig.height=9, fig.width=9, message=FALSE, warning=FALSE}
 data_selag %>%
-  pivot_longer(c(fruit_set:prop_pred_seeds,grazing), 
+  pivot_longer(c(fruit_set:prop_seeds_esc,grazing), 
                names_to = "variable", values_to = "value") %>%
   ggplot(aes(x=value))+ geom_histogram(colour="black", fill="white")+
   facet_wrap(vars(variable), ncol = 2,scales="free") + my_theme()
@@ -120,12 +123,14 @@ data_selag %>%
 
 # Models interactions ~ climate (mean temps only)
 
-Using only mean temperatures + precipitation. Running models with and without FFD. Using grazing as a proportion, and for 2008-2015 use values of proportion of aboveground volume. 
+Using only mean temperatures. Using grazing as a proportion, and for 2008-2015 use values of proportion of aboveground volume. 
 
 - 1987-1996: grazing = proportion of flowers removed
 - 2006: grazing = proportion of grazed shoots
 - 2007-2015: grazing = proportion of aboveground volume removed
 - 2016-2017: grazing = proportion of flowers removed
+
+Using blmer/bglmer (Maximum a posteriori estimation for linear and generalized linear mixed-effects models in a Bayesian setting) instead of lmer/glmer because the latter gave warning "singular fit" in some cases.
 
 ```{r message=FALSE, warning=FALSE}
 grazing_new<-read.table("C:/Users/user/Dropbox/SU/Projects/lathyrus/lathyrus_ms3/data/grazing_new.csv",header=T,sep=",",dec=".") 
@@ -133,104 +138,139 @@ data_selag<-left_join(data_selag,grazing_new)%>%
   mutate(grazing_corr=ifelse(is.na(grazing_new),grazing,grazing_new))
 ```
 
-
 Model selections for constructing path diagram
 
 ### Number of seeds per flower
 
 ```{r message=FALSE, warning=FALSE}
 # Variables to use (march-may)
-subset21<-subset(data_selag[c(2:3,37:39,62,65)],!is.na(n_seeds_per_fl)&!is.na(FFD)) 
-subset21[,c(1,3:5,7)]<-scale(subset21[,c(1,3:5,7)]) 
+subset21<-subset(data_selag[c(2:3,16,37:39,62,66)],!is.na(n_seeds_per_fl)&!is.na(FFD)) 
+subset21[,c(1,3:6,8)]<-scale(subset21[,c(1,3:6,8)]) 
 
-globmod_n_seeds_per_fl_path<-glmer(round(n_seeds_per_fl)~mean_3+mean_4+mean_5+FFD+grazing_corr+
+globmod_n_seeds_per_fl_path<-glmer(round(n_seeds_per_fl)~mean_3+mean_4+mean_5+FFD+n_fl+grazing_corr+
                                      (1|id),data=subset21,family="poisson",na.action="na.fail")
 
 # Excluding collinear variables with r > 0.4
-smat21 <- abs(cor(subset21[, -c(2,6)])) <= .4 # TRUE: cor<=0.4,FALSE: cor>0.4
+smat21 <- abs(cor(subset21[, -c(2,7)])) <= .4 # TRUE: cor<=0.4,FALSE: cor>0.4
 smat21[!lower.tri(smat21)] <- NA
 
 clusterType <- if(length(find.package("snow", quiet = TRUE))) "SOCK" else "PSOCK"
 clust21 <- try(makeCluster(getOption("cl.cores", 3), type = clusterType))
 clusterExport(clust21, "subset21")
 clusterEvalQ(clust21, library(lme4))
-modsel_n_seeds_per_fl_path<-pdredge(globmod_n_seeds_per_fl_path,fixed=c("FFD"),
-                                    subset=smat21,cluster=clust21)
+modsel_n_seeds_per_fl_path<-pdredge(globmod_n_seeds_per_fl_path,subset=smat21,cluster=clust21)
 ```
 
 Variable importance, coefficients of averaged model and R square of the best model
 
 ```{r message=FALSE, warning=FALSE}
 importance(modsel_n_seeds_per_fl_path) # Variable importance
-kable(summary(model.avg(modsel_n_seeds_per_fl_path,
-                        subset=delta<2))$coefmat.full) # Coefs averaged model
+kable(summary(get.models(modsel_n_seeds_per_fl_path,
+                         subset=1)$"43")$coefficients) # Coefs best model
 r.squaredGLMM(get.models(modsel_n_seeds_per_fl_path,
-                         subset=1)$"1") # R square of best model
+                         subset=1)$"43") # R square of best model
 ```
 
-### Proportion of predated seeds
+### Proportion of seeds escaping predation
 
 ```{r message=FALSE, warning=FALSE}
 # Variables to use (march-may)
-subset22<-subset(data_selag[c(2:3,37:40,63)],!is.na(prop_pred_seeds)&!is.na(FFD)) 
-subset22[,c(1,3:6)]<-scale(subset22[,c(1,3:6)]) 
+subset22<-subset(subset(data_selag,n_seeds>0)[c(2:3,15,16,37:40,64)],
+                 !is.na(n_intact_seeds)&!is.na(FFD)&!is.na(n_fl)) 
+subset22[,c(1,4:8)]<-scale(subset22[,c(1,4:8)]) 
 
-globmod_prop_pred_seeds_path<-glmer(prop_pred_seeds~mean_3+mean_4+mean_5+mean_6+
-                             FFD+(1|id),data=subset22,
-                             family="binomial",na.action="na.fail")
+globmod_prop_seeds_esc_path<-glmer(cbind(round(n_intact_seeds),round(n_pred_seeds))~
+                                     mean_3+mean_4+mean_5+mean_6+n_fl+FFD+
+                                     (1|id),data=subset22,family="binomial",na.action="na.fail")
 
 # Excluding collinear variables with r > 0.4
-smat22 <- abs(cor(subset22[, -c(2,7)])) <= .4 # TRUE: cor<=0.4,FALSE: cor>0.4
+smat22 <- abs(cor(subset22[, -c(2:3,9)])) <= .4 # TRUE: cor<=0.4,FALSE: cor>0.4
 smat22[!lower.tri(smat22)] <- NA
 
 clusterType <- if(length(find.package("snow", quiet = TRUE))) "SOCK" else "PSOCK"
 clust22 <- try(makeCluster(getOption("cl.cores", 3), type = clusterType))
 clusterExport(clust22, "subset22")
 clusterEvalQ(clust22, library(lme4))
-modsel_prop_pred_seeds_path<-pdredge(globmod_prop_pred_seeds_path,fixed=c("FFD"),
-                                     subset=smat22,cluster=clust22)
+modsel_prop_seeds_esc_path<-pdredge(globmod_prop_seeds_esc_path,subset=smat22,cluster=clust22)
 ```
 
 Variable importance, coefficients of averaged model and R square of the best model
 
 ```{r message=FALSE, warning=FALSE}
-importance(modsel_prop_pred_seeds_path) # Variable importance
-kable(summary(model.avg(modsel_prop_pred_seeds_path,
-                        subset=delta<2))$coefmat.full) # Coefs averaged model
-r.squaredGLMM(get.models(modsel_prop_pred_seeds_path,
-                         subset=1)$"8") # R square of best model
+importance(modsel_prop_seeds_esc_path) # Variable importance
+kable(summary(model.avg(modsel_prop_seeds_esc_path,
+                         subset=delta<2))$coefmat.full) # Coefs averaged model
+r.squaredGLMM(get.models(modsel_prop_seeds_esc_path,
+                         subset=1)$"18") # R square of best model
 ```
 
-### Grazing
+### Grazing (proportion)
 
 ```{r message=FALSE, warning=FALSE}
 # Variables to use (march-may)
-subset23<-subset(data_selag[c(2:3,16,37:39,65)],!is.na(grazing_corr)&!is.na(FFD)&
+subset23<-subset(data_selag[c(2:3,16,37:39,66)],!is.na(grazing_corr)&!is.na(FFD)&
                    !is.na(n_fl)) 
 subset23[,c(1,3:6)]<-scale(subset23[,c(1,3:6)]) 
 
-globmod_grazing_path<-glmer(grazing_corr~mean_3+mean_4+mean_5+FFD+n_fl+(1|id),
-                              data = subset23,family="binomial",na.action="na.fail")
+globmod_grazing_path<-glmer(grazing_corr~mean_3+mean_4+mean_5+FFD+n_fl+
+                              (1|id),data = subset23,family="binomial",na.action="na.fail")
 
 # Excluding collinear variables with r > 0.4
-smat23 <- abs(cor(subset23[, -c(2:3,7)])) <= .4 # TRUE: cor<=0.4,FALSE: cor>0.4
+smat23 <- abs(cor(subset23[, -c(2,7)])) <= .4 # TRUE: cor<=0.4,FALSE: cor>0.4
 smat23[!lower.tri(smat23)] <- NA
 
 clusterType <- if(length(find.package("snow", quiet = TRUE))) "SOCK" else "PSOCK"
 clust23 <- try(makeCluster(getOption("cl.cores", 3), type = clusterType))
 clusterExport(clust23, "subset23")
 clusterEvalQ(clust23, library(lme4))
-modsel_grazing_path<-pdredge(globmod_grazing_path,fixed=c("FFD"),subset=smat23,cluster=clust23)
+modsel_grazing_path<-pdredge(globmod_grazing_path,subset=smat23,cluster=clust23)
 ```
 
 Variable importance, coefficients of averaged model and R square of the best model
 
 ```{r message=FALSE, warning=FALSE}
 importance(modsel_grazing_path) # Variable importance
-kable(summary(model.avg(modsel_grazing_path,
-                        subset=delta<2))$coefmat.full) # Coefs averaged model
+kable(summary(model.avg(modsel_grazing_path,subset=delta<2))$coefmat.full) # Coefs averaged model
 r.squaredGLMM(get.models(modsel_grazing_path,
-                         subset=1)$"2") # R square of best model
+                         subset=1)$"18") # R square of best model
+```
+
+### Grazing (success/failure)
+
+```{r message=FALSE, warning=FALSE}
+data_selag$grazing_success<-round(data_selag$grazing_corr*100)
+data_selag$grazing_failure<-100-data_selag$grazing_success
+# Variables to use (march-may)
+subset23<-subset(data_selag[c(2:3,16,37:39,67:68)],!is.na(grazing_success)&!is.na(FFD)&
+                   !is.na(n_fl)) 
+#subset23<-subset(data_selag[c(2:3,16,37:39,66)],!is.na(grazing_corr)&!is.na(FFD)&
+#                   !is.na(n_fl)) 
+subset23[,c(1,3:6)]<-scale(subset23[,c(1,3:6)]) 
+
+globmod_grazing_path<-glmer(cbind(grazing_success,grazing_failure)~mean_3+mean_4+mean_5+FFD+n_fl+
+#globmod_grazing_path<-glmer(grazing_corr~mean_3+mean_4+mean_5+FFD+n_fl+
+                              (1|id),data = subset23,family="binomial",na.action="na.fail")
+
+# Excluding collinear variables with r > 0.4
+smat23 <- abs(cor(subset23[, -c(2,7:8)])) <= .4 # TRUE: cor<=0.4,FALSE: cor>0.4
+#smat23 <- abs(cor(subset23[, -c(2,7)])) <= .4 # TRUE: cor<=0.4,FALSE: cor>0.4
+smat23[!lower.tri(smat23)] <- NA
+
+clusterType <- if(length(find.package("snow", quiet = TRUE))) "SOCK" else "PSOCK"
+clust23 <- try(makeCluster(getOption("cl.cores", 3), type = clusterType))
+clusterExport(clust23, "subset23")
+clusterEvalQ(clust23, library(lme4))
+modsel_grazing_path<-pdredge(globmod_grazing_path,subset=smat23,cluster=clust23)
+```
+
+Variable importance, coefficients of averaged model and R square of the best model
+
+```{r message=FALSE, warning=FALSE}
+importance(modsel_grazing_path) # Variable importance
+kable(summary(get.models(modsel_grazing_path,
+                         subset=1)$"28")$coefficients) # Coefs best model
+r.squaredGLMM(get.models(modsel_grazing_path,
+                         subset=1)$"28") # R square of best model
 ```
 
 ### FFD
@@ -266,8 +306,6 @@ r.squaredGLMM(get.models(modsel_FFD_path,
 # Models to build path diagram
 
 ```{r}
-#data_selag1<-subset(data_selag,!is.na(FFD)&!is.na(n_seeds_per_fl)&!is.na(grazing_corr)&
-#              !is.na(prop_pred_seeds)&!is.na(n_intact_seeds))
 data_selag$mean_3_s<-scale(data_selag$mean_3)
 data_selag$mean_4_s<-scale(data_selag$mean_4)
 data_selag$mean_5_s<-scale(data_selag$mean_5)
@@ -277,8 +315,10 @@ data_selag$grazing_corr_s<-scale(data_selag$grazing_corr)
 data_selag$n_fl_s<-scale(data_selag$n_fl)
 data_selag$n_seeds_per_fl_round<-round(data_selag$n_seeds_per_fl)
 data_selag$n_seeds_per_fl_round_s<-scale(round(data_selag$n_seeds_per_fl))
-data_selag$prop_pred_seeds_s<-scale(data_selag$prop_pred_seeds)
+data_selag$prop_seeds_esc_s<-scale(data_selag$prop_seeds_esc)
 data_selag$n_intact_seeds_round<-round(data_selag$n_intact_seeds)
+data_selag<-as.data.frame(data_selag %>% group_by(year) %>%
+  mutate(n_intact_seeds_rel_round=round(n_intact_seeds/mean(n_intact_seeds,na.rm=T))))
 ```
 
 ```{r}
@@ -290,117 +330,122 @@ summary(mod_FFD)
 # FFD <- mean_4 -2.305 * 
 # FFD <- mean_5 -4.774 * 
 
-mod_grazing<-glmer(grazing_corr~mean_4_s+FFD_s+(1|id),data_selag,family="binomial")
+mod_grazing<-glmer(cbind(grazing_success,grazing_failure)~mean_4_s+mean_5_s+n_fl_s+(1|id),data_selag,
+                   family="binomial")
 summary(mod_grazing) 
-# Grazing <- mean_4 -0.188 * 
-# Grazing <- FFD -0.296 * 
+# Grazing <- mean_4 -0.472 * 
+# Grazing <- mean_5 -0.939 * 
+# Grazing <- n_fl 0.074* 
 
-mod_n_seeds_per_fl<-glmer(n_seeds_per_fl_round~+FFD_s+grazing_corr_s+(1|id),data_selag,
+mod_n_seeds_per_fl<-glmer(n_seeds_per_fl_round~FFD_s+grazing_corr_s+mean_4_s+n_fl_s+(1|id),data_selag,
                           family="poisson")
 summary(mod_n_seeds_per_fl) 
-# Number of seeds per flower <- FFD -0.119 * 
-# Number of seeds per flower <- grazing -0.735 * 
+# Number of seeds per flower <- FFD -0.210 * 
+# Number of seeds per flower <- grazing -0.718 * 
+# Number of seeds per flower <- mean_4 -0.053 *
+# Number of seeds per flower <- n_fl -0.237 *
 
-mod_prop_pred_seeds<-glmer(prop_pred_seeds~mean_6_s+FFD_s+(1|id),
-                           data_selag,family="binomial")
-summary(mod_prop_pred_seeds)
-# Proportion of predated seeds <- mean_6 0.532 * 
-# Proportion of predated seeds <- FFD -0.401 * 
+mod_prop_seeds_esc<-glmer(cbind(round(n_intact_seeds),round(n_pred_seeds))~mean_6_s+FFD_s+n_fl_s+
+                            (1|id),data_selag,family="binomial")
+summary(mod_prop_seeds_esc)
+# Proportion of seeds escaping predation<- mean_6 -0.788 * 
+# Proportion of seeds escaping predation <- FFD -0.534 * 
+# Proportion of seeds escaping predation <- n_fl -0.083 *
 
-mod_n_intact_seeds1<-glmer(n_intact_seeds_round~n_fl_s+(1|id),data_selag,family="poisson")
-mod_n_intact_seeds2<-glmer(n_intact_seeds_round~n_seeds_per_fl_round_s+(1|id),data_selag,
+mod_n_intact_seeds1<-glmer(n_intact_seeds_rel_round~n_fl_s+(1|id),data_selag,family="poisson")
+mod_n_intact_seeds2<-glmer(n_intact_seeds_rel_round~n_seeds_per_fl_round_s+(1|id),data_selag,
               family="poisson")
-mod_n_intact_seeds3<-glmer(n_intact_seeds_round~prop_pred_seeds_s+(1|id),data_selag,
+mod_n_intact_seeds3<-glmer(n_intact_seeds_rel_round~prop_seeds_esc_s+(1|id),data_selag,
                            family="poisson")
 summary(mod_n_intact_seeds1)
 summary(mod_n_intact_seeds2)
 summary(mod_n_intact_seeds3)
 
-# Number of intact seeds <- n_fl 0.310 *
-# Number of intact seeds <- n_seeds_per_fl_round 0.536 *
-# Number of intact seeds <- prop_pred_seeds -0.117 *
+# Number of intact seeds <- n_fl 0.323 *
+# Number of intact seeds <- n_seeds_per_fl_round 0.520 *
+# Number of intact seeds <- prop_pred_seeds 0.705 *
 ```
 
 # Relationship N seeds per fl ~ grazing with different measures
 
 ```{r}
 # All years
-summary(glmer(n_seeds_per_fl_round~grazing_corr+(1|id),data_selag,family="poisson")) 
+summary(bglmer(n_seeds_per_fl_round~grazing_corr+(1|id),data_selag,family="poisson")) 
 # Years with grazing = proportion of flowers removed
-summary(glmer(n_seeds_per_fl_round~grazing_corr+(1|id),
+summary(bglmer(n_seeds_per_fl_round~grazing_corr+(1|id),
               subset(data_selag,year<1997|year>2015),family="poisson")) 
 # Years with grazing = proportion of grazed shoots
-summary(glmer(n_seeds_per_fl_round~grazing_corr+(1|id),
+summary(bglmer(n_seeds_per_fl_round~grazing_corr+(1|id),
               subset(data_selag,year==2006),family="poisson")) 
 # Years with grazing = proportion aboveground volume removed
-summary(glmer(n_seeds_per_fl_round~grazing_corr+(1|id),
+summary(bglmer(n_seeds_per_fl_round~grazing_corr+(1|id),
               subset(data_selag,year>2006&year<2016),family="poisson")) 
-# Coefs: -2.212, -2.666, -0.052 (NS), -3.305
+# Coefs: -2.213, -2.667, -0.055 (NS), -3.311
 ```
 
 ```{r echo=FALSE, message=FALSE, warning=FALSE}
 ggplot()+my_theme()+
     geom_point(data=as.data.frame(effect(term= "grazing_corr",
-                                      mod=glmer(n_seeds_per_fl_round~grazing_corr+(1|id),
+                                      mod=bglmer(n_seeds_per_fl_round~grazing_corr+(1|id),
                                                 data_selag,family="poisson"))),
              aes(x=grazing_corr, y=fit), color="black") +  
   ylab("N seeds per fl (model estimate)") +
     geom_line(data=as.data.frame(effect(term= "grazing_corr",
-                                        mod= glmer(n_seeds_per_fl_round~grazing_corr+(1|id),
+                                        mod= bglmer(n_seeds_per_fl_round~grazing_corr+(1|id),
                                                 data_selag,family="poisson"))),
             aes(x=grazing_corr, y=fit), color="black") +
     geom_ribbon(data=as.data.frame(effect(term= "grazing_corr", 
-                                          mod= glmer(n_seeds_per_fl_round~grazing_corr+(1|id),
+                                          mod= bglmer(n_seeds_per_fl_round~grazing_corr+(1|id),
                                                 data_selag,family="poisson"))),
               aes(x=grazing_corr, ymin=lower, ymax=upper), alpha= 0.3, fill="black")+
   geom_point(data=as.data.frame(effect(term= "grazing_corr",
-                                      mod=glmer(n_seeds_per_fl_round~grazing_corr+(1|id),
+                                      mod=bglmer(n_seeds_per_fl_round~grazing_corr+(1|id),
                                                 subset(data_selag,year<1997|year>2015),
                                                 family="poisson"))),
              aes(x=grazing_corr, y=fit), color="blue") +   
     geom_line(data=as.data.frame(effect(term= "grazing_corr",
-                                        mod= glmer(n_seeds_per_fl_round~grazing_corr+(1|id),
+                                        mod= bglmer(n_seeds_per_fl_round~grazing_corr+(1|id),
                                                 subset(data_selag,year<1997|year>2015),
                                                 family="poisson"))),
             aes(x=grazing_corr, y=fit), color="blue") +
     geom_ribbon(data=as.data.frame(effect(term= "grazing_corr", 
-                                          mod= glmer(n_seeds_per_fl_round~grazing_corr+(1|id),
+                                          mod= bglmer(n_seeds_per_fl_round~grazing_corr+(1|id),
                                                 subset(data_selag,year<1997|year>2015),
                                                 family="poisson"))),
               aes(x=grazing_corr, ymin=lower, ymax=upper), alpha= 0.3, fill="blue")+
   geom_point(data=as.data.frame(effect(term= "grazing_corr",
-                                      mod=glmer(n_seeds_per_fl_round~grazing_corr+(1|id),
+                                      mod=bglmer(n_seeds_per_fl_round~grazing_corr+(1|id),
                                                 subset(data_selag,year==2006),
                                                 family="poisson"))),
              aes(x=grazing_corr, y=fit), color="green") +   
     geom_line(data=as.data.frame(effect(term= "grazing_corr",
-                                        mod= glmer(n_seeds_per_fl_round~grazing_corr+(1|id),
+                                        mod= bglmer(n_seeds_per_fl_round~grazing_corr+(1|id),
                                                 subset(data_selag,year==2006),
                                                 family="poisson"))),
             aes(x=grazing_corr, y=fit), color="green") +
     geom_ribbon(data=as.data.frame(effect(term= "grazing_corr", 
-                                          mod= glmer(n_seeds_per_fl_round~grazing_corr+(1|id),
+                                          mod= bglmer(n_seeds_per_fl_round~grazing_corr+(1|id),
                                                 subset(data_selag,year==2006),
                                                 family="poisson"))),
               aes(x=grazing_corr, ymin=lower, ymax=upper), alpha= 0.3, fill="green")+
   geom_point(data=as.data.frame(effect(term= "grazing_corr",
-                                      mod=glmer(n_seeds_per_fl_round~grazing_corr+(1|id),
+                                      mod=bglmer(n_seeds_per_fl_round~grazing_corr+(1|id),
                                                 subset(data_selag,year>2006&year<2016),
                                                 family="poisson"))),
              aes(x=grazing_corr, y=fit), color="red") +   
     geom_line(data=as.data.frame(effect(term= "grazing_corr",
-                                        mod= glmer(n_seeds_per_fl_round~grazing_corr+(1|id),
+                                        mod= bglmer(n_seeds_per_fl_round~grazing_corr+(1|id),
                                                 subset(data_selag,year>2006&year<2016),
                                                 family="poisson"))),
             aes(x=grazing_corr, y=fit), color="red") +
     geom_ribbon(data=as.data.frame(effect(term= "grazing_corr", 
-                                          mod= glmer(n_seeds_per_fl_round~grazing_corr+(1|id),
+                                          mod= bglmer(n_seeds_per_fl_round~grazing_corr+(1|id),
                                                 subset(data_selag,year>2006&year<2016),
                                                 family="poisson"))),
               aes(x=grazing_corr, ymin=lower, ymax=upper), alpha= 0.3, fill="red")
 ```
 
-# Correct grazing in 2006
+# Correct grazing in 2006 (not used)
 
 In 2006, grazing was measured as the proportion of grazed shoots. This might overestimate grazing if for example a plant with one shoot was only a bit grazed, as the proportion of grazed shoots, i.e. the value of grazing, would still be 1. To correct for this, I calculated the mean grazing in grazed plants (grazing > 0) with one shoot in 2007-2017, which was 0.8382075472. I then multiply grazing in 2006 by this value to correct for overestimation. 
 
@@ -413,60 +458,60 @@ data_selag$grazing_corr2<-with(data_selag,
 ```{r echo=FALSE, message=FALSE, warning=FALSE}
 ggplot()+my_theme()+
     geom_point(data=as.data.frame(effect(term= "grazing_corr",
-                                      mod=glmer(n_seeds_per_fl_round~grazing_corr+(1|id),
+                                      mod=bglmer(n_seeds_per_fl_round~grazing_corr+(1|id),
                                                 data_selag,family="poisson"))),
              aes(x=grazing_corr, y=fit), color="black") +  
   ylab("N seeds per fl (model estimate)") +
     geom_line(data=as.data.frame(effect(term= "grazing_corr",
-                                        mod= glmer(n_seeds_per_fl_round~grazing_corr+(1|id),
+                                        mod= bglmer(n_seeds_per_fl_round~grazing_corr+(1|id),
                                                 data_selag,family="poisson"))),
             aes(x=grazing_corr, y=fit), color="black") +
     geom_ribbon(data=as.data.frame(effect(term= "grazing_corr", 
-                                          mod= glmer(n_seeds_per_fl_round~grazing_corr+(1|id),
+                                          mod= bglmer(n_seeds_per_fl_round~grazing_corr+(1|id),
                                                 data_selag,family="poisson"))),
               aes(x=grazing_corr, ymin=lower, ymax=upper), alpha= 0.3, fill="black")+
   geom_point(data=as.data.frame(effect(term= "grazing_corr",
-                                      mod=glmer(n_seeds_per_fl_round~grazing_corr+(1|id),
+                                      mod=bglmer(n_seeds_per_fl_round~grazing_corr+(1|id),
                                                 subset(data_selag,year<1997|year>2015),
                                                 family="poisson"))),
              aes(x=grazing_corr, y=fit), color="blue") +   
     geom_line(data=as.data.frame(effect(term= "grazing_corr",
-                                        mod= glmer(n_seeds_per_fl_round~grazing_corr+(1|id),
+                                        mod= bglmer(n_seeds_per_fl_round~grazing_corr+(1|id),
                                                 subset(data_selag,year<1997|year>2015),
                                                 family="poisson"))),
             aes(x=grazing_corr, y=fit), color="blue") +
     geom_ribbon(data=as.data.frame(effect(term= "grazing_corr", 
-                                          mod= glmer(n_seeds_per_fl_round~grazing_corr+(1|id),
+                                          mod= bglmer(n_seeds_per_fl_round~grazing_corr+(1|id),
                                                 subset(data_selag,year<1997|year>2015),
                                                 family="poisson"))),
               aes(x=grazing_corr, ymin=lower, ymax=upper), alpha= 0.3, fill="blue")+
   geom_point(data=as.data.frame(effect(term= "grazing_corr2",
-                                      mod=glmer(n_seeds_per_fl_round~grazing_corr2+(1|id),
+                                      mod=bglmer(n_seeds_per_fl_round~grazing_corr2+(1|id),
                                                 subset(data_selag,year==2006),
                                                 family="poisson"))),
              aes(x=grazing_corr2, y=fit), color="green") +   
     geom_line(data=as.data.frame(effect(term= "grazing_corr2",
-                                        mod= glmer(n_seeds_per_fl_round~grazing_corr2+(1|id),
+                                        mod= bglmer(n_seeds_per_fl_round~grazing_corr2+(1|id),
                                                 subset(data_selag,year==2006),
                                                 family="poisson"))),
             aes(x=grazing_corr2, y=fit), color="green") +
     geom_ribbon(data=as.data.frame(effect(term= "grazing_corr2", 
-                                          mod= glmer(n_seeds_per_fl_round~grazing_corr2+(1|id),
+                                          mod= bglmer(n_seeds_per_fl_round~grazing_corr2+(1|id),
                                                 subset(data_selag,year==2006),
                                                 family="poisson"))),
               aes(x=grazing_corr2, ymin=lower, ymax=upper), alpha= 0.3, fill="green")+
   geom_point(data=as.data.frame(effect(term= "grazing_corr",
-                                      mod=glmer(n_seeds_per_fl_round~grazing_corr+(1|id),
+                                      mod=bglmer(n_seeds_per_fl_round~grazing_corr+(1|id),
                                                 subset(data_selag,year>2006&year<2016),
                                                 family="poisson"))),
              aes(x=grazing_corr, y=fit), color="red") +   
     geom_line(data=as.data.frame(effect(term= "grazing_corr",
-                                        mod= glmer(n_seeds_per_fl_round~grazing_corr+(1|id),
+                                        mod= bglmer(n_seeds_per_fl_round~grazing_corr+(1|id),
                                                 subset(data_selag,year>2006&year<2016),
                                                 family="poisson"))),
             aes(x=grazing_corr, y=fit), color="red") +
     geom_ribbon(data=as.data.frame(effect(term= "grazing_corr", 
-                                          mod= glmer(n_seeds_per_fl_round~grazing_corr+(1|id),
+                                          mod= bglmer(n_seeds_per_fl_round~grazing_corr+(1|id),
                                                 subset(data_selag,year>2006&year<2016),
                                                 family="poisson"))),
               aes(x=grazing_corr, ymin=lower, ymax=upper), alpha= 0.3, fill="red")
@@ -483,52 +528,52 @@ subset(data_selag,year==2006) %>%
 ```{r echo=FALSE, message=FALSE, warning=FALSE}
 ggplot()+my_theme()+
     geom_point(data=as.data.frame(effect(term= "grazing_corr",
-                                      mod=glmer(n_seeds_per_fl_round~grazing_corr+(1|id),
+                                      mod=bglmer(n_seeds_per_fl_round~grazing_corr+(1|id),
                                                 subset(data_selag,year==2006),
                                                 family="poisson"))),
              aes(x=grazing_corr, y=fit), color="green") +   
     geom_line(data=as.data.frame(effect(term= "grazing_corr",
-                                        mod= glmer(n_seeds_per_fl_round~grazing_corr+(1|id),
+                                        mod= bglmer(n_seeds_per_fl_round~grazing_corr+(1|id),
                                                 subset(data_selag,year==2006),
                                                 family="poisson"))),
             aes(x=grazing_corr, y=fit), color="green") +
     geom_ribbon(data=as.data.frame(effect(term= "grazing_corr", 
-                                          mod= glmer(n_seeds_per_fl_round~grazing_corr+(1|id),
+                                          mod= bglmer(n_seeds_per_fl_round~grazing_corr+(1|id),
                                                 subset(data_selag,year==2006),
                                                 family="poisson"))),
               aes(x=grazing_corr, ymin=lower, ymax=upper), alpha= 0.3, fill="green")+
   geom_point(data=as.data.frame(effect(term= "grazing_corr2",
-                                      mod=glmer(n_seeds_per_fl_round~grazing_corr2+(1|id),
+                                      mod=bglmer(n_seeds_per_fl_round~grazing_corr2+(1|id),
                                                 subset(data_selag,year==2006),
                                                 family="poisson"))),
              aes(x=grazing_corr2, y=fit), color="orange") +   
     geom_line(data=as.data.frame(effect(term= "grazing_corr2",
-                                        mod= glmer(n_seeds_per_fl_round~grazing_corr2+(1|id),
+                                        mod= bglmer(n_seeds_per_fl_round~grazing_corr2+(1|id),
                                                 subset(data_selag,year==2006),
                                                 family="poisson"))),
             aes(x=grazing_corr2, y=fit), color="orange") +
     geom_ribbon(data=as.data.frame(effect(term= "grazing_corr2", 
-                                          mod= glmer(n_seeds_per_fl_round~grazing_corr2+(1|id),
+                                          mod= bglmer(n_seeds_per_fl_round~grazing_corr2+(1|id),
                                                 subset(data_selag,year==2006),
                                                 family="poisson"))),
               aes(x=grazing_corr2, ymin=lower, ymax=upper), alpha= 0.3, fill="orange")+
   ylab("N seeds per fl (model estimate)")+ggtitle("2006")
 ```
 
-# Graphs to be included in the paper
+# Graphs to be included in the paper (to be modified based on final path model)
 
 ```{r message=FALSE, warning=FALSE}
-mod_FFD_ns<-lmer(FFD~mean_4+mean_5+(1|id),data_selag)
-mod_grazing_ns<-glmer(grazing_corr~mean_4+FFD+
+mod_FFD_ns<-blmer(FFD~mean_4+mean_5+(1|id),data_selag)
+mod_grazing_ns<-bglmer(grazing_corr~mean_4+FFD+
                 (1|id),data_selag,family="binomial")
-mod_n_seeds_per_fl_ns<-glmer(n_seeds_per_fl_round~FFD+
+mod_n_seeds_per_fl_ns<-bglmer(n_seeds_per_fl_round~FFD+
                             grazing_corr+(1|id),data_selag,family="poisson")
-mod_prop_pred_seeds_ns<-glmer(prop_pred_seeds~mean_6+FFD+(1|id),
+mod_prop_pred_seeds_ns<-bglmer(prop_pred_seeds~mean_6+FFD+(1|id),
                            data_selag,family="binomial")
-mod_n_intact_seeds1_ns<-glmer(n_intact_seeds_round~n_fl+(1|id),data_selag,family="poisson")
-mod_n_intact_seeds2_ns<-glmer(n_intact_seeds_round~n_seeds_per_fl_round+(1|id),data_selag,
+mod_n_intact_seeds1_ns<-bglmer(n_intact_seeds_round~n_fl+(1|id),data_selag,family="poisson")
+mod_n_intact_seeds2_ns<-bglmer(n_intact_seeds_round~n_seeds_per_fl_round+(1|id),data_selag,
               family="poisson")
-mod_n_intact_seeds3_ns<-glmer(n_intact_seeds_round~prop_pred_seeds+(1|id),data_selag,
+mod_n_intact_seeds3_ns<-bglmer(n_intact_seeds_round~prop_pred_seeds+(1|id),data_selag,
                            family="poisson")
 ```
 
@@ -673,6 +718,219 @@ fig5<-
 ggsave(filename=
          "C:/Users/User/Dropbox/SU/Projects/lathyrus/lathyrus_ms3/results/figures/fig5.tiff",
        plot=fig5,device="tiff",width=30,height=10,units="cm",dpi=300,compression="lzw")
+```
+
+# Repeat model selections with grazing = binomial
+
+## Grazing
+
+```{r message=FALSE, warning=FALSE}
+data_selag$grazing_bin<-with(data_selag,ifelse(grazing_corr>0,1,ifelse(grazing_corr==0,0,NA)))
+# Variables to use (march-may)
+subset25<-subset(data_selag[c(2:3,16,37:39,81)],!is.na(grazing_bin)&!is.na(FFD)&
+                   !is.na(n_fl)) 
+subset25[,c(1,3:6)]<-scale(subset25[,c(1,3:6)]) 
+
+globmod_grazing_bin_path<-glmer(grazing_bin~mean_3+mean_4+mean_5+FFD+n_fl+
+                              (1|id),data = subset25,family="binomial",na.action="na.fail")
+
+# Excluding collinear variables with r > 0.4
+smat25 <- abs(cor(subset25[, -c(2,7)])) <= .4 # TRUE: cor<=0.4,FALSE: cor>0.4
+smat25[!lower.tri(smat25)] <- NA
+
+clusterType <- if(length(find.package("snow", quiet = TRUE))) "SOCK" else "PSOCK"
+clust25 <- try(makeCluster(getOption("cl.cores", 3), type = clusterType))
+clusterExport(clust25, "subset25")
+clusterEvalQ(clust25, library(lme4))
+modsel_grazing_bin_path<-pdredge(globmod_grazing_bin_path,subset=smat25,cluster=clust25)
+```
+
+Variable importance, coefficients of averaged model and R square of the best model
+
+```{r message=FALSE, warning=FALSE}
+importance(modsel_grazing_bin_path) # Variable importance
+kable(summary(get.models(modsel_grazing_bin_path,
+                         subset=1)$"18")$coefficients) # Coefs averaged model
+r.squaredGLMM(get.models(modsel_grazing_bin_path,
+                         subset=1)$"18") # R square of best model
+```
+
+# Path model without climatic variables
+
+```{r}
+mod_grazing_noclim<-glmer(grazing_corr~n_fl_s+FFD_s+(1|id),data_selag,
+                   family="binomial")
+summary(mod_grazing_noclim) 
+# Grazing <- FFD_s -0.279 * vs NS
+
+mod_grazing_bin_noclim<-glmer(grazing_bin~n_fl_s+FFD_s+(1|id),data_selag,
+                   family="binomial")
+summary(mod_grazing_bin_noclim) 
+# Grazing <- FFD_s -0.244 * vs NS
+# Grazing <- n_fl 0.200 * vs 0.074*
+
+mod_n_seeds_per_fl_noclim<-glmer(n_seeds_per_fl_round~FFD_s+grazing_corr_s+n_fl_s+(1|id),data_selag,
+                          family="poisson")
+summary(mod_n_seeds_per_fl_noclim) 
+# Number of seeds per flower <- FFD -0.184 * vs -0.210 *
+# Number of seeds per flower <- grazing -0.714 * vs -0.718 *
+# Number of seeds per flower <- n_fl -0.226 * vs -0.237 *
+
+mod_prop_seeds_esc_noclim<-glmer(cbind(round(n_intact_seeds),round(n_pred_seeds))~FFD_s+n_fl_s+
+                            (1|id),subset(data_selag,n_seeds>0),family="binomial")
+summary(mod_prop_seeds_esc_noclim)
+# Proportion of seeds escaping predation <- FFD -0.316 * vs -0.534 *
+# Proportion of seeds escaping predation <- n_fl -0.075 * vs -0.083 *
+```
+
+# Effects of interactions on selection
+
+```{r}
+data_selag<-as.data.frame(data_selag %>% group_by(year) %>%
+  mutate(n_intact_seeds_rel=n_intact_seeds/mean(n_intact_seeds,na.rm=T))%>%  #Relative fitness
+  mutate(FFD_std=(FFD-mean(FFD,na.rm=T))/sd(FFD,na.rm=T)) %>%                #Standardized FFD
+  mutate(n_fl_std=(n_fl-mean(n_fl,na.rm=T))/sd(n_fl,na.rm=T)))               #Standardized n_fl
+```
+
+## Model with the three interactions
+
+## Grazing as proportion
+
+```{r}
+mod_int_sel1<-lmer(n_intact_seeds_rel ~ FFD_std+n_fl_std+
+                     n_seeds_per_fl+prop_seeds_esc+grazing_corr+
+               FFD_std:n_seeds_per_fl+FFD_std:prop_seeds_esc+FFD_std:grazing_corr+(1|id),data_selag)
+summary(mod_int_sel1)
+```
+
+## Grazing as 0/1
+
+```{r}
+data_selag$grazing_bin_factor<-as.factor(data_selag$grazing_bin)
+mod_int_sel2<-lmer(n_intact_seeds_rel ~ FFD_std+n_fl_std+
+                     n_seeds_per_fl+prop_seeds_esc+grazing_bin_factor+
+               FFD_std:n_seeds_per_fl+FFD_std:prop_seeds_esc+FFD_std:grazing_bin_factor+
+                 (1|id),data_selag)
+summary(mod_int_sel2)
+```
+
+### Graphs of interaction effects
+
+```{r fig.height=5, fig.width=6, message=FALSE, warning=FALSE}
+interaction1<-data.frame(effect(term="FFD_std:n_seeds_per_fl",mod=mod_int_sel1,
+                       xlevels=list(FFD_std=seq(-2.8,3.3,0.1),
+                                    n_seeds_per_fl=seq(0,11,0.5))))
+interaction1$fit_mod<-with(interaction1,ifelse(fit<0,0,fit))
+
+myPalette <- colorRampPalette(brewer.pal(11, "YlOrRd"))
+ggplot(interaction1, aes(FFD_std,fit_mod, group = as.factor(n_seeds_per_fl)))+
+  geom_smooth(method=lm,se=F,size=0.5,aes(FFD_std,fit_mod,color=n_seeds_per_fl))+
+  xlab("Standardized first flowering date")+ylab("Relative number of intact seeds")+
+  my_theme()+scale_colour_gradientn(colours = myPalette(100))+
+  theme(legend.position="top")+labs(colour="Number of seeds per flower")
+```
+
+```{r fig.height=5, fig.width=6, message=FALSE, warning=FALSE}
+interaction2<-data.frame(effect(term="FFD_std:prop_seeds_esc",mod=mod_int_sel1,
+                       xlevels=list(FFD_std=seq(-2.8,3.3,0.1),
+                                    prop_seeds_esc=seq(0,1,0.05))))
+interaction2$fit_mod<-with(interaction2,ifelse(fit<0,0,fit))
+
+ggplot(interaction2, aes(FFD_std,fit_mod, group = as.factor(prop_seeds_esc)))+
+  geom_smooth(method=lm,se=F,size=0.5,aes(FFD_std,fit_mod,color=prop_seeds_esc))+
+  xlab("Standardized first flowering date")+ylab("Relative number of intact seeds")+
+  my_theme()+scale_colour_gradientn(colours = myPalette(100))+
+  theme(legend.position="top")+labs(colour="Proportion of seeds that escaped predation")
+```
+
+## Single models with each interaction
+
+### Pollination
+
+```{r}
+mod_int_sel3<-lmer(n_intact_seeds_rel ~ FFD_std+n_fl_std+n_seeds_per_fl+
+                     FFD_std:n_seeds_per_fl+(1|id),data_selag)
+summary(mod_int_sel3)
+```
+
+### Seed predation
+
+```{r}
+mod_int_sel4<-lmer(n_intact_seeds_rel ~ FFD_std+n_fl_std+prop_seeds_esc+
+                     FFD_std:prop_seeds_esc+(1|id),data_selag)
+summary(mod_int_sel4)
+```
+
+### Grazing (as proportion)
+
+```{r}
+mod_int_sel5<-lmer(n_intact_seeds_rel ~ FFD_std+n_fl_std+grazing_corr+
+                     FFD_std:grazing_corr+(1|id),data_selag)
+summary(mod_int_sel5)
+```
+
+### Grazing (as binomial)
+
+```{r}
+mod_int_sel6<-lmer(n_intact_seeds_rel ~ FFD_std+n_fl_std+grazing_bin_factor+
+                     FFD_std:grazing_bin_factor+(1|id),data_selag)
+summary(mod_int_sel6)
+```
+
+### Graphs of interaction effects
+
+```{r fig.height=5, fig.width=6, message=FALSE, warning=FALSE}
+interaction3<-data.frame(effect(term="FFD_std:n_seeds_per_fl",mod=mod_int_sel3,
+                       xlevels=list(FFD_std=seq(-2.8,3.3,0.1),
+                                    n_seeds_per_fl=seq(0,11,0.5))))
+interaction3$fit_mod<-with(interaction3,ifelse(fit<0,0,fit))
+
+myPalette <- colorRampPalette(brewer.pal(11, "YlOrRd"))
+ggplot(interaction3, aes(FFD_std,fit_mod, group = as.factor(n_seeds_per_fl)))+
+  geom_smooth(method=lm,se=F,size=0.5,aes(FFD_std,fit_mod,color=n_seeds_per_fl))+
+  xlab("Standardized first flowering date")+ylab("Relative number of intact seeds")+
+  my_theme()+scale_colour_gradientn(colours = myPalette(100))+
+  theme(legend.position="top")+labs(colour="Number of seeds per flower")
+```
+
+```{r fig.height=5, fig.width=6, message=FALSE, warning=FALSE}
+interaction4<-data.frame(effect(term="FFD_std:prop_seeds_esc",mod=mod_int_sel4,
+                       xlevels=list(FFD_std=seq(-2.8,3.3,0.1),
+                                    prop_seeds_esc=seq(0,1,0.05))))
+interaction4$fit_mod<-with(interaction4,ifelse(fit<0,0,fit))
+
+myPalette <- colorRampPalette(brewer.pal(11, "YlOrRd"))
+ggplot(interaction4, aes(FFD_std,fit_mod, group = as.factor(prop_seeds_esc)))+
+  geom_smooth(method=lm,se=F,size=0.5,aes(FFD_std,fit_mod,color=prop_seeds_esc))+
+  xlab("Standardized first flowering date")+ylab("Relative number of intact seeds")+
+  my_theme()+scale_colour_gradientn(colours = myPalette(100))+
+  theme(legend.position="top")+labs(colour="Proportion of seeds escaping predation")
+```
+
+```{r fig.height=5, fig.width=6, message=FALSE, warning=FALSE}
+interaction5<-data.frame(effect(term="FFD_std:grazing_corr",mod=mod_int_sel5,
+                       xlevels=list(FFD_std=seq(-2.8,3.3,0.1),
+                                    grazing_corr=seq(0,1,0.05))))
+interaction5$fit_mod<-with(interaction5,ifelse(fit<0,0,fit))
+
+myPalette <- colorRampPalette(brewer.pal(11, "YlOrRd"))
+ggplot(interaction5, aes(FFD_std,fit_mod, group = as.factor(grazing_corr)))+
+  geom_smooth(method=lm,se=F,size=0.5,aes(FFD_std,fit_mod,color=grazing_corr))+
+  xlab("Standardized first flowering date")+ylab("Relative number of intact seeds")+
+  my_theme()+scale_colour_gradientn(colours = myPalette(100))+
+  theme(legend.position="top")+labs(colour="Proportion of grazing")
+```
+
+```{r fig.height=5, fig.width=6, message=FALSE, warning=FALSE}
+interaction6<-data.frame(effect(term="FFD_std:grazing_bin_factor",mod=mod_int_sel6,
+                       xlevels=list(FFD_std=seq(-2.8,3.3,0.1))))
+interaction6$fit_mod<-with(interaction6,ifelse(fit<0,0,fit))
+
+ggplot(interaction6, aes(FFD_std,fit_mod, group =grazing_bin_factor))+
+  geom_smooth(method=lm,se=F,size=0.5,aes(FFD_std,fit_mod,color=grazing_bin_factor))+
+  xlab("Standardized first flowering date")+ylab("Relative number of intact seeds")+
+  my_theme()+
+  theme(legend.position="top")+labs(colour="Grazing")
 ```
 
 
