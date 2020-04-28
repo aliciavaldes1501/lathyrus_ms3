@@ -58,8 +58,7 @@ mean_weather<-read.table("C:/Users/user/Dropbox/SU/Projects/lathyrus/lathyrus_ms
 data_selag<-data_selag[c(1:7,9:10,12,14:15,17:18,21,22)]
 data_selag$n_fl<-data_selag$cum_n_fl
 data_selag$cum_n_fl<-NULL
-mean_weather<-mean_weather[c(1,7:10,19:22,31:34,43:46,103:106,115:118,127:130,139:142,
-                             146:155)]
+mean_weather<-mean_weather[c(1,115:118)]
 data_selag<-merge(data_selag,mean_weather,by="year")%>%
   arrange(.,id)
 
@@ -68,7 +67,7 @@ data_selag<-anti_join(data_selag,subset(data_selag,is.na(FFD)&is.na(grazing)&
                                           is.na(n_seeds)&is.na(n_intact_seeds)&
                                           is.na(n_fl))) # Remove rows with all these NAs
 names(data_selag)
-
+data_selag<-subset(data_selag,year!=1995) # Remove data from 1995 due to problems with predation
 ```
 
 List of variables in data set:
@@ -88,17 +87,13 @@ List of variables in data set:
 - n_seeds: number of seeds
 - n_intact_seeds: number of intact (non-predated) seeds
 - n_fl: number of flowers
-- GDD3/5/7/10_3/4/5/6: number of growing degree days (base 3/5/7/10 ºC) in March/April/May/June
-- max_3/4/5/6: average of daily maximum temperatures for March/April/May/June
 - mean_3/4/5/6: average of daily mean temperatures for March/April/May/June
-- min_3/4/5/6: average of daily minimum temperatures for March/April/May/June
-- precipitation_3/4/5/6: sum of precipitation for March/April/May/June
 
 Interactions that we will focus on:
 
-- Pollination: fruit set (number of fruits per flower), seed set (number of seeds per ovule), number of seeds per fruit ´(not used so far), number of seeds per flower
-- Seed predation: proportion of predated seeds
-- Grazing (by deer) before flowering: proportion of grazing (probably converted to a binomial variable)
+- Pollination: number of seeds per flower
+- Seed predation: proportion of seeds escaping predation
+- Grazing (by deer) before flowering: proportion of grazing
 
 Calculate fruit set, seed set, number of seeds per fruit, number of seeds per flower, proportion of predated seeds
 
@@ -121,8 +116,6 @@ data_selag %>%
   facet_wrap(vars(variable), ncol = 2,scales="free") + my_theme()
 ```
 
-# Models interactions ~ climate (mean temps only)
-
 Using only mean temperatures. Using grazing as a proportion, and for 2008-2015 use values of proportion of aboveground volume. 
 
 - 1987-1996: grazing = proportion of flowers removed
@@ -130,86 +123,130 @@ Using only mean temperatures. Using grazing as a proportion, and for 2008-2015 u
 - 2007-2015: grazing = proportion of aboveground volume removed
 - 2016-2017: grazing = proportion of flowers removed
 
-Using blmer/bglmer (Maximum a posteriori estimation for linear and generalized linear mixed-effects models in a Bayesian setting) instead of lmer/glmer because the latter gave warning "singular fit" in some cases.
-
-```{r message=FALSE, warning=FALSE}
+```{r message=FALSE, warning=FALSE, include=FALSE}
 grazing_new<-read.table("C:/Users/user/Dropbox/SU/Projects/lathyrus/lathyrus_ms3/data/grazing_new.csv",header=T,sep=",",dec=".") 
 data_selag<-left_join(data_selag,grazing_new)%>%
   mutate(grazing_corr=ifelse(is.na(grazing_new),grazing,grazing_new))
 ```
 
-Model selections for constructing path diagram
+# 1. Effects of yearly intensity of interactions on selection
 
-### Number of seeds per flower
+Because grazing influences (decreases) the number of seeds per flower, we calculate residuals of number of seeds per flower on grazing to use in the model.
 
-```{r message=FALSE, warning=FALSE}
-# Variables to use (march-may)
-subset21<-subset(data_selag[c(2:3,16,37:39,62,66)],!is.na(n_seeds_per_fl)&!is.na(FFD)) 
-subset21[,c(1,3:6,8)]<-scale(subset21[,c(1,3:6,8)]) 
+In this model, we use: fitness relativized within years, FFD and n_fl standardized within years,interactions standardized accross years. Main effects of interactions are not included because fitness was relativized within years. 
 
-globmod_n_seeds_per_fl_path_GLM<-glm(round(n_seeds_per_fl)~mean_3+mean_4+mean_5+FFD+n_fl+grazing_corr,
-                                     data=subset21,family="poisson",na.action="na.fail")
-globmod_n_seeds_per_fl_path_GLMM<-glmer(round(n_seeds_per_fl)~mean_3+mean_4+mean_5+FFD+n_fl+grazing_corr+
-                                     (1|id),data=subset21,family="poisson",na.action="na.fail")
+N = 2376
 
-clusterType <- if(length(find.package("snow", quiet = TRUE))) "SOCK" else "PSOCK"
-clust21 <- try(makeCluster(getOption("cl.cores", 3), type = clusterType))
-clusterExport(clust21, "subset21")
-clusterEvalQ(clust21, library(lme4))
-modsel_n_seeds_per_fl_path_GLM<-pdredge(globmod_n_seeds_per_fl_path_GLM,cluster=clust21)
-modsel_n_seeds_per_fl_path_GLMM<-pdredge(globmod_n_seeds_per_fl_path_GLMM,cluster=clust21)
+```{r}
+data_selag$n_seeds_per_fl_res<-with(data_selag,ifelse(is.na(n_seeds_per_fl),NA,
+                                           residuals(lm(n_seeds_per_fl~grazing_corr,
+                                               data=data_selag))))
+data_selag_means<-data_selag%>%
+  group_by(year)%>%
+  dplyr::summarise(n_seeds_per_fl_mean=mean(n_seeds_per_fl,na.rm=T),
+                   n_seeds_per_fl_res_mean=mean(n_seeds_per_fl_res,na.rm=T),
+                   grazing_mean=mean(grazing_corr,na.rm=T),
+                   prop_seeds_esc_mean=mean(prop_seeds_esc,na.rm=T),
+                   FFD_mean=mean(FFD,na.rm=T),
+                   FFD_sd=sd(FFD,na.rm=T),
+                   n_fl_mean=mean(n_fl,na.rm=T),
+                   n_fl_sd=sd(n_fl,na.rm=T),
+                   n_intact_seeds_mean=mean(n_intact_seeds,na.rm=T))
+
+data_selag<-data_selag%>%left_join(data_selag_means,by="year")
+# Standardize interactions accross years
+data_selag$n_seeds_per_fl_mean_s<-scale(data_selag$n_seeds_per_fl_mean)
+data_selag$n_seeds_per_fl_res_mean_s<-scale(data_selag$n_seeds_per_fl_res_mean)
+data_selag$grazing_mean_s<-scale(data_selag$grazing_mean)
+data_selag$prop_seeds_esc_mean_s<-scale(data_selag$prop_seeds_esc_mean)
+
+# Relativize fitness within years and standardize FFD and n_fl within years
+data_selag$n_intact_seeds_rel_y<-with(data_selag,n_intact_seeds/n_intact_seeds_mean)
+data_selag$FFD_s_y<-with(data_selag,(FFD-FFD_mean)/FFD_sd)
+data_selag$n_fl_s_y<-with(data_selag,(n_fl-n_fl_mean)/n_fl_sd)
 ```
 
-Coefficients of averaged model and R square of the best model
-
-```{r message=FALSE, warning=FALSE}
-kable(summary(model.avg(modsel_n_seeds_per_fl_path_GLM,
-                        subset=delta<2))$coefmat.full,digits=c(3,3,3,2,3)) # Coefs averaged model
-kable(summary(model.avg(modsel_n_seeds_per_fl_path_GLMM,
-                        subset=delta<2))$coefmat.full,digits=c(3,3,3,2,3)) # Coefs averaged model
-r.squaredGLMM(get.models(modsel_n_seeds_per_fl_path_GLM,
-                         subset=1)$"59") # R square of best model
-r.squaredGLMM(get.models(modsel_n_seeds_per_fl_path_GLMM,
-                         subset=1)$"59") # R square of best model
+```{r}
+mod_int_sel_GLM<-lm(n_intact_seeds_rel_y ~ FFD_s_y+n_fl_s_y+
+               FFD_s_y:n_seeds_per_fl_res_mean_s+FFD_s_y:grazing_mean_s+FFD_s_y:prop_seeds_esc_mean_s,
+               data_selag)
+mod_int_sel_GLMM<-lmer(n_intact_seeds_rel_y ~ FFD_s_y+n_fl_s_y+
+               FFD_s_y:n_seeds_per_fl_res_mean_s+FFD_s_y:grazing_mean_s+FFD_s_y:prop_seeds_esc_mean_s+
+                 (1|id),data_selag)
+# Results of models (t-tests)
+kable(summary(mod_int_sel_GLM)$coefficients,digits=c(3,3,2,3))
+kable(summary(mod_int_sel_GLMM)$coefficients,digits=c(3,3,1,2,3))
+# Analysis of variance/ deviance (F-test for GLM, Wald chi‐square tests for GLMM)
+kable(Anova(mod_int_sel_GLM))
+kable(Anova(mod_int_sel_GLM))
 ```
 
-### Proportion of seeds escaping predation
+Significant effect of all grazing on selection.
 
-```{r message=FALSE, warning=FALSE}
-# Variables to use (march-may)
-subset22<-subset(subset(data_selag,n_seeds>0)[c(2:3,15,16,37:40,64)],
-                 !is.na(n_intact_seeds)&!is.na(FFD)&!is.na(n_fl)) 
-subset22[,c(1,4:8)]<-scale(subset22[,c(1,4:8)]) 
+### Graphs of interaction effects 
 
-globmod_prop_seeds_esc_path_GLM<-glm(cbind(round(n_intact_seeds),round(n_pred_seeds))~
-                                     mean_3+mean_4+mean_5+mean_6+n_fl+FFD,
-                                     data=subset22,family="binomial",na.action="na.fail")
-globmod_prop_seeds_esc_path_GLMM<-glmer(cbind(round(n_intact_seeds),round(n_pred_seeds))~
-                                     mean_3+mean_4+mean_5+mean_6+n_fl+FFD+
-                                     (1|id),data=subset22,family="binomial",na.action="na.fail")
+Graphs based on GLMMs with non-standardized interactions - to show real values of interactions in the color bars.
 
-clusterType <- if(length(find.package("snow", quiet = TRUE))) "SOCK" else "PSOCK"
-clust22 <- try(makeCluster(getOption("cl.cores", 3), type = clusterType))
-clusterExport(clust22, "subset22")
-clusterEvalQ(clust22, library(lme4))
-modsel_prop_seeds_esc_path_GLM<-pdredge(globmod_prop_seeds_esc_path_GLM,cluster=clust22)
-modsel_prop_seeds_esc_path_GLMM<-pdredge(globmod_prop_seeds_esc_path_GLMM,cluster=clust22)
+```{r echo=FALSE, fig.height=5, fig.width=6, message=FALSE, warning=FALSE}
+mod_int_sel_GLMM_nsints<-lmer(n_intact_seeds_rel_y ~ FFD_s_y+n_fl_s_y+
+               FFD_s_y:n_seeds_per_fl_res_mean+FFD_s_y:grazing_mean+FFD_s_y:prop_seeds_esc_mean+
+                 (1|id),data_selag)
+interaction1_nsints<-data.frame(effect(term="FFD_s_y:grazing_mean",mod=mod_int_sel_GLMM_nsints,
+                       xlevels=list(FFD_s_y=seq(-3.9,4.16,0.1),
+                                    grazing_mean=seq(0.01,0.75,0.01))))
+
+myPalette <- colorRampPalette(brewer.pal(11, "YlOrRd"))
+
+ggplot(interaction1_nsints, aes(FFD_s_y,fit, group = as.factor(grazing_mean)))+
+  geom_smooth(method=lm,se=F,size=0.5,aes(FFD_s_y,fit,color=grazing_mean))+
+  xlab("Standardized first flowering date")+ylab("Relative number of intact seeds")+
+  my_theme()+scale_colour_gradientn(colours = myPalette(100))+
+  theme(legend.position="top")+labs(colour="Proportion of grazing")
 ```
 
-Coefficients of averaged model and R square of the best model
+- The slope of the relationship among fitness and FFD is more positive in years with higher proportions of grazing → selection for later flowering in those years
 
-```{r message=FALSE, warning=FALSE}
-kable(summary(get.models(modsel_prop_seeds_esc_path_GLM,
-                         subset=1)$"63")$coefficients,digits=c(3,3,2,3)) # Coefs best model
-kable(summary(get.models(modsel_prop_seeds_esc_path_GLMM,
-                         subset=1)$"63")$coefficients,digits=c(3,3,2,3)) # Coefs best model
-r.squaredGLMM(get.models(modsel_prop_seeds_esc_path_GLM,
-                         subset=1)$"63") # R square of best model
-r.squaredGLMM(get.models(modsel_prop_seeds_esc_path_GLMM,
-                         subset=1)$"63") # R square of best model
+## Effects on selection gradients for each year
+
+```{r}
+selgrads_FFD<-data.frame(data_selag %>% group_by(year) %>% 
+  do(model = lm(n_intact_seeds_rel_y ~ FFD_s_y+n_fl_s_y, data = .)) %>% tidy(model))
+selgrads_FFD$sig<-ifelse(selgrads_FFD$p.value<0.05,"*","") 
+kable(subset(selgrads_FFD,term=="FFD_s_y"),digits=3)  #Linear selection gradients for FFD
+#FFD * (selection for early flowering) in 1991,1992,1993,1994,2007,2010,2012,2014 (as in EL paper)
 ```
 
-### Grazing (successes/failures)
+```{r fig.height=5, fig.width=18}
+data_selag_means<-data_selag_means%>%
+  left_join(subset(selgrads_FFD,term=="FFD_s_y")[c(1,3)])
+grid.arrange(
+  ggplot(data_selag_means,aes(x=n_seeds_per_fl_res_mean,y=estimate))+my_theme()+
+  geom_point()+geom_smooth(method="lm")+ylab("Selection gradient for FFD")+
+  xlab("Mean number of seeds per flower (residuals)"),
+  ggplot(data_selag_means,aes(x=grazing_mean,y=estimate))+my_theme()+
+  geom_point()+geom_smooth(method="lm")+ylab("Selection gradient for FFD")+
+  xlab("Mean grazing"),
+  ggplot(data_selag_means,aes(x=prop_seeds_esc_mean,y=estimate))+my_theme()+
+  geom_point()+geom_smooth(method="lm")+ylab("Selection gradient for FFD")+
+  xlab("Mean proportion of seeds escaping predation"),
+  ncol=3)
+```
+
+```{r}
+kable(summary(lm(estimate~n_seeds_per_fl_res_mean,data_selag_means))$coefficients)
+kable(summary(lm(estimate~grazing_mean,data_selag_means))$coefficients)
+kable(summary(lm(estimate~prop_seeds_esc_mean,data_selag_means))$coefficients)
+kable(summary(lm(estimate~n_seeds_per_fl_res_mean+grazing_mean+prop_seeds_esc_mean,
+                 data_selag_means))$coefficients)
+```
+
+No significant effects of yearly mean interactions on yearly selection gradients (but effect of grazing is ALMOST significant)
+
+# 2. Models interactions ~ climate (across years)
+
+Model selections for later constructing a path diagram.
+
+Calculate successes/failures for grazing
 
 ```{r}
 data_selag$grazing_success<-round(with(data_selag,ifelse(is.na(grazing_corr),NA,
@@ -228,61 +265,137 @@ data_selag<-data_selag%>%
   left_join(grazing_success_2006)
 data_selag$grazing_success<-with(data_selag,ifelse(year==2006,gr_success,grazing_success))
 data_selag$grazing_failure<-with(data_selag,ifelse(year==2006,gr_failure,grazing_failure))
-```
-
-```{r}
 data_selag$gr_success<-NULL
 data_selag$gr_failure<-NULL
 ```
 
-```{r message=FALSE, warning=FALSE}
-# Variables to use (march-may)
-subset24<-subset(data_selag[c(2:3,16,37:39,67:68)],!is.na(grazing_success)&!is.na(FFD)&
-                   !is.na(n_fl)) 
-subset24[,c(1,3:6)]<-scale(subset24[,c(1,3:6)]) 
+In these models, we use: fitness relativized accross years, FFD, n_fl,interactions and climatic variables standardized accross years (i.e. all variables, being either responses or predictors, standardized accross years).
 
-globmod_grazing_path_sf_GLM<-glm(cbind(grazing_success,grazing_failure)~mean_3+mean_4+mean_5+FFD+n_fl,
-                                 data = subset24,family="binomial",na.action="na.fail")
-globmod_grazing_path_sf_GLMM<-glmer(cbind(grazing_success,grazing_failure)~mean_3+mean_4+mean_5+FFD+n_fl+
-                              (1|id),data = subset24,family="binomial",na.action="na.fail")
+PROBLEM: Interactions cannot be standardized when used as responses! So far standardized only when used as predictors. 
+
+```{r}
+data_selag$n_intact_seeds_rel<-data_selag$n_intact_seeds/mean(data_selag$n_intact_seeds,na.rm=T)
+data_selag$FFD_s<-(data_selag$FFD-mean(data_selag$FFD,na.rm=T))/sd(data_selag$FFD,na.rm=T)
+data_selag$n_fl_s<-(data_selag$n_fl-mean(data_selag$n_fl,na.rm=T))/sd(data_selag$n_fl,na.rm=T)
+data_selag$mean_3_s<-(data_selag$mean_3-mean(data_selag$mean_3,na.rm=T))/sd(data_selag$mean_3,na.rm=T)
+data_selag$mean_4_s<-(data_selag$mean_4-mean(data_selag$mean_4,na.rm=T))/sd(data_selag$mean_4,na.rm=T)
+data_selag$mean_5_s<-(data_selag$mean_5-mean(data_selag$mean_5,na.rm=T))/sd(data_selag$mean_5,na.rm=T)
+data_selag$mean_6_s<-(data_selag$mean_6-mean(data_selag$mean_6,na.rm=T))/sd(data_selag$mean_6,na.rm=T)
+data_selag$grazing_corr_s<-(data_selag$grazing_corr-mean(data_selag$grazing_corr,na.rm=T))/
+  sd(data_selag$grazing_corr,na.rm=T)
+data_selag$n_seeds_per_fl_s<-(data_selag$n_seeds_per_fl-mean(data_selag$n_seeds_per_fl,na.rm=T))/
+  sd(data_selag$n_seeds_per_fl,na.rm=T)
+# Proportion of seeds escaping predation and grazing are used as successes/failures when being response
+# variables, thus not standardized - OK?
+```
+
+### Number of seeds per flower
+
+```{r message=FALSE, warning=FALSE}
+data_selag_subset1<-subset(data_selag,!is.na(n_seeds_per_fl)&!is.na(FFD_s))
+globmod_n_seeds_per_fl_path_GLM<-glm(round(n_seeds_per_fl)~mean_3_s+mean_4_s+mean_5_s+
+                                       FFD_s+n_fl_s+grazing_corr_s,data=data_selag_subset1,
+                                     family="poisson",na.action="na.fail")
+globmod_n_seeds_per_fl_path_GLMM<-glmer(round(n_seeds_per_fl)~mean_3_s+mean_4_s+mean_5_s+
+                                       FFD_s+n_fl_s+grazing_corr_s+(1|id),data=data_selag_subset1,
+                                       family="poisson",na.action="na.fail")
 
 clusterType <- if(length(find.package("snow", quiet = TRUE))) "SOCK" else "PSOCK"
-clust24 <- try(makeCluster(getOption("cl.cores", 3), type = clusterType))
-clusterExport(clust24, "subset24")
-clusterEvalQ(clust24, library(lme4))
-modsel_grazing_path_sf_GLM<-pdredge(globmod_grazing_path_sf_GLM,cluster=clust24)
-modsel_grazing_path_sf_GLMM<-pdredge(globmod_grazing_path_sf_GLMM,cluster=clust24)
+clust1 <- try(makeCluster(getOption("cl.cores", 3), type = clusterType))
+clusterExport(clust1, "data_selag_subset1")
+clusterEvalQ(clust1, library(lme4))
+modsel_n_seeds_per_fl_path_GLM<-pdredge(globmod_n_seeds_per_fl_path_GLM,cluster=clust1)
+modsel_n_seeds_per_fl_path_GLMM<-pdredge(globmod_n_seeds_per_fl_path_GLMM,cluster=clust1)
 ```
 
 Coefficients of averaged model and R square of the best model
 
 ```{r message=FALSE, warning=FALSE}
-kable(summary(get.models(modsel_grazing_path_sf_GLM,
-                         subset=1)$"31")$coefficients,digits=c(3,3,2,3)) # Coefs best model
-kable(summary(get.models(modsel_grazing_path_sf_GLMM,
-                         subset=1)$"31")$coefficients,digits=c(3,3,2,3)) # Coefs best model
-r.squaredGLMM(get.models(modsel_grazing_path_sf_GLMM,
+kable(summary(model.avg(modsel_n_seeds_per_fl_path_GLM,
+                        subset=delta<2))$coefmat.full,digits=c(3,3,3,2,3)) # Coefs averaged model
+kable(summary(model.avg(modsel_n_seeds_per_fl_path_GLMM,
+                        subset=delta<2))$coefmat.full,digits=c(3,3,3,2,3)) # Coefs averaged model
+r.squaredGLMM(get.models(modsel_n_seeds_per_fl_path_GLM,
+                         subset=1)$"59") # R square of best model
+r.squaredGLMM(get.models(modsel_n_seeds_per_fl_path_GLMM,
+                         subset=1)$"59") # R square of best model
+```
+
+### Proportion of seeds escaping predation
+
+```{r message=FALSE, warning=FALSE}
+data_selag_subset2<-subset(subset(data_selag,n_seeds>0),!is.na(n_intact_seeds)&!is.na(n_fl_s)&!is.na(FFD_s))
+globmod_prop_seeds_esc_path_GLM<-glm(cbind(round(n_intact_seeds),round(n_pred_seeds))~
+                                     mean_3_s+mean_4_s+mean_5_s+mean_6_s+n_fl_s+FFD_s,
+                                     data=data_selag_subset2,family="binomial",na.action="na.fail")
+globmod_prop_seeds_esc_path_GLMM<-glmer(cbind(round(n_intact_seeds),round(n_pred_seeds))~
+                                     mean_3_s+mean_4_s+mean_5_s+mean_6_s+n_fl_s+FFD_s+
+                                     (1|id),data=data_selag_subset2,family="binomial",na.action="na.fail")
+clusterType <- if(length(find.package("snow", quiet = TRUE))) "SOCK" else "PSOCK"
+clust2 <- try(makeCluster(getOption("cl.cores", 3), type = clusterType))
+clusterExport(clust2, "data_selag_subset2")
+clusterEvalQ(clust2, library(lme4))
+modsel_prop_seeds_esc_path_GLM<-pdredge(globmod_prop_seeds_esc_path_GLM,cluster=clust2)
+modsel_prop_seeds_esc_path_GLMM<-pdredge(globmod_prop_seeds_esc_path_GLMM,cluster=clust2)
+```
+
+Coefficients of averaged model and R square of the best model
+
+```{r message=FALSE, warning=FALSE}
+kable(summary(get.models(modsel_prop_seeds_esc_path_GLM,
+                         subset=1)$"63")$coefficients,digits=c(3,3,2,3)) # Coefs best model
+kable(summary(get.models(modsel_prop_seeds_esc_path_GLMM,subset=1)$"63")$coefficients,
+      digits=c(3,3,2,3)) # Coefs best model, failed to converge
+r.squaredGLMM(get.models(modsel_prop_seeds_esc_path_GLM,
+                         subset=1)$"63") # R square of best model
+r.squaredGLMM(get.models(modsel_prop_seeds_esc_path_GLMM,
+                         subset=1)$"63") # R square of best model, failed to converge
+```
+
+### Grazing
+
+```{r message=FALSE, warning=FALSE}
+data_selag_subset3<-subset(data_selag,!is.na(grazing_success)&!is.na(FFD_s)&!is.na(n_fl))
+globmod_grazing_path_GLM<-glm(cbind(grazing_success,grazing_failure)~mean_3_s+mean_4_s+mean_5_s+
+                                n_fl_s+FFD_s,data = data_selag_subset3,
+                              family="binomial",na.action="na.fail")
+globmod_grazing_path_GLMM<-glmer(cbind(grazing_success,grazing_failure)~mean_3_s+mean_4_s+mean_5_s+
+                                   n_fl_s+FFD_s+(1|id),data = data_selag_subset3,
+                                 family="binomial",na.action="na.fail")
+clusterType <- if(length(find.package("snow", quiet = TRUE))) "SOCK" else "PSOCK"
+clust3 <- try(makeCluster(getOption("cl.cores", 3), type = clusterType))
+clusterExport(clust3, "data_selag_subset3")
+clusterEvalQ(clust3, library(lme4))
+modsel_grazing_path_GLM<-pdredge(globmod_grazing_path_GLM,cluster=clust3)
+modsel_grazing_path_GLMM<-pdredge(globmod_grazing_path_GLMM,cluster=clust3)
+```
+
+Coefficients of averaged model and R square of the best model
+
+```{r message=FALSE, warning=FALSE}
+kable(summary(get.models(modsel_grazing_path_GLM,subset=1)$"31")$coefficients,
+      digits=c(3,3,2,3)) # Coefs best model
+kable(summary(get.models(modsel_grazing_path_GLMM,subset=1)$"31")$coefficients,
+      digits=c(3,3,2,3)) # Coefs best model, failed to converge, nearly unidentifiable
+r.squaredGLMM(get.models(modsel_grazing_path_GLM,
                          subset=1)$"31") # R square of best model
-r.squaredGLMM(get.models(modsel_grazing_path_sf_GLMM,
-                         subset=1)$"31") # R square of best model
+r.squaredGLMM(get.models(modsel_grazing_path_GLMM,
+                         subset=1)$"31") # R square of best model, failed to converge, nearly unidentifiable
 ```
 
 ### FFD
 
 ```{r message=FALSE, warning=FALSE}
-# Variables to use (march-may)
-subset26<-subset(data_selag[c(2:3,37:39)],!is.na(FFD)) 
-subset26[,c(3:5)]<-scale(subset26[,c(3:5)]) 
-
-globmod_FFD_path_GLM<-lm(FFD~mean_3+mean_4+mean_5,data = subset26,na.action="na.fail")
-globmod_FFD_path_GLMM<-lmer(FFD~mean_3+mean_4+mean_5+(1|id),data = subset26,na.action="na.fail")
-
+data_selag_subset4<-subset(data_selag,!is.na(FFD_s))
+globmod_FFD_path_GLM<-lm(FFD_s~mean_3_s+mean_4_s+mean_5_s,data = data_selag_subset4,na.action="na.fail")
+globmod_FFD_path_GLMM<-lmer(FFD_s~mean_3_s+mean_4_s+mean_5_s+(1|id),
+                            data = data_selag_subset4,na.action="na.fail")
 clusterType <- if(length(find.package("snow", quiet = TRUE))) "SOCK" else "PSOCK"
-clust26 <- try(makeCluster(getOption("cl.cores", 3), type = clusterType))
-clusterExport(clust26, "subset26")
-clusterEvalQ(clust26, library(lme4))
-modsel_FFD_path_GLM<-pdredge(globmod_FFD_path_GLM,cluster=clust26)
-modsel_FFD_path_GLMM<-pdredge(globmod_FFD_path_GLMM,cluster=clust26)
+clust4 <- try(makeCluster(getOption("cl.cores", 3), type = clusterType))
+clusterExport(clust4, "data_selag_subset4")
+clusterEvalQ(clust4, library(lme4))
+modsel_FFD_path_GLM<-pdredge(globmod_FFD_path_GLM,cluster=clust4)
+modsel_FFD_path_GLMM<-pdredge(globmod_FFD_path_GLMM,cluster=clust4)
 ```
 
 Coefficients of averaged model and R square of the best model
@@ -298,6 +411,83 @@ r.squaredGLMM(get.models(modsel_FFD_path_GLMM,
                          subset=1)$"7") # R square of best model
 ```
 
+# 3. Models interactions ~ climate (within years)
+
+Model selections for later constructing a path diagram.
+
+In these models, we use: fitness relativized within years, FFD and n_fl standardized within years, interactions and climatic variables standardized accross years.
+
+In this model, we do not include effects of temperature on FFD.
+
+PROBLEM: Interactions cannot be standardized when used as responses! So far standardized only when used as predictors. 
+
+# HERE!!! (but revise above)
+
+### Number of seeds per flower
+
+```{r message=FALSE, warning=FALSE}
+globmod_n_seeds_per_fl_path_GLM_y<-glm(round(n_seeds_per_fl)~mean_3_s+mean_4_s+mean_5_s+
+                                       FFD_s_y+n_fl_s_y+grazing_corr_s,data=data_selag_subset1,
+                                     family="poisson",na.action="na.fail")
+globmod_n_seeds_per_fl_path_GLMM_y<-glmer(round(n_seeds_per_fl)~mean_3_s+mean_4_s+mean_5_s+
+                                       FFD_s_y+n_fl_s_y+grazing_corr_s+(1|id),data=data_selag_subset1,
+                                       family="poisson",na.action="na.fail")
+
+clusterType <- if(length(find.package("snow", quiet = TRUE))) "SOCK" else "PSOCK"
+clust1 <- try(makeCluster(getOption("cl.cores", 3), type = clusterType))
+clusterExport(clust1, "data_selag_subset1")
+clusterEvalQ(clust1, library(lme4))
+modsel_n_seeds_per_fl_path_GLM_y<-pdredge(globmod_n_seeds_per_fl_path_GLM_y,cluster=clust1)
+modsel_n_seeds_per_fl_path_GLMM_y<-pdredge(globmod_n_seeds_per_fl_path_GLMM_y,cluster=clust1)
+```
+
+Coefficients of averaged model and R square of the best model
+
+```{r message=FALSE, warning=FALSE}
+kable(summary(model.avg(modsel_n_seeds_per_fl_path_GLM_y,
+                        subset=delta<2))$coefmat.full,digits=c(3,3,3,2,3)) # Coefs averaged model
+kable(summary(model.avg(modsel_n_seeds_per_fl_path_GLM_y,
+                        subset=delta<2))$coefmat.full,digits=c(3,3,3,2,3)) # Coefs averaged model
+r.squaredGLMM(get.models(modsel_n_seeds_per_fl_path_GLM_y,
+                         subset=1)$"59") # R square of best model
+r.squaredGLMM(get.models(modsel_n_seeds_per_fl_path_GLM_y,
+                         subset=1)$"59") # R square of best model
+```
+
+### Proportion of seeds escaping predation
+
+```{r message=FALSE, warning=FALSE}
+globmod_prop_seeds_esc_path_GLM_y<-glm(cbind(round(n_intact_seeds),round(n_pred_seeds))~
+                                     mean_3_s+mean_4_s+mean_5_s+mean_6_s+FFD_s_y+n_fl_s_y,
+                                     data=data_selag_subset2,family="binomial",na.action="na.fail")
+globmod_prop_seeds_esc_path_GLMM_y<-glmer(cbind(round(n_intact_seeds),round(n_pred_seeds))~
+                                     mean_3_s+mean_4_s+mean_5_s+mean_6_s+FFD_s_y+n_fl_s_y+
+                                     (1|id),data=data_selag_subset2,family="binomial",na.action="na.fail")
+clusterType <- if(length(find.package("snow", quiet = TRUE))) "SOCK" else "PSOCK"
+clust2 <- try(makeCluster(getOption("cl.cores", 3), type = clusterType))
+clusterExport(clust2, "data_selag_subset2")
+clusterEvalQ(clust2, library(lme4))
+modsel_prop_seeds_esc_path_GLM_y<-pdredge(globmod_prop_seeds_esc_path_GLM_y,cluster=clust2)
+modsel_prop_seeds_esc_path_GLMM_y<-pdredge(globmod_prop_seeds_esc_path_GLMM_y,cluster=clust2)
+```
+
+Coefficients of averaged model and R square of the best model
+
+```{r message=FALSE, warning=FALSE}
+kable(summary(get.models(modsel_prop_seeds_esc_path_GLM_y,
+                         subset=1)$"63")$coefficients,digits=c(3,3,2,3)) # Coefs best model
+kable(summary(get.models(modsel_prop_seeds_esc_path_GLM_y,subset=1)$"63")$coefficients,
+      digits=c(3,3,2,3)) # Coefs best model, failed to converge
+r.squaredGLMM(get.models(modsel_prop_seeds_esc_path_GLM_y,
+                         subset=1)$"63") # R square of best model
+r.squaredGLMM(get.models(modsel_prop_seeds_esc_path_GLM_y,
+                         subset=1)$"63") # R square of best model, failed to converge
+```
+
+
+
+
+
 # Models to build path diagram (to be modified based on final model selections)
 
 ```{r}
@@ -311,10 +501,7 @@ data_selag$n_fl_s<-scale(data_selag$n_fl)
 data_selag$n_seeds_per_fl_round<-round(data_selag$n_seeds_per_fl)
 data_selag$n_seeds_per_fl_round_s<-scale(round(data_selag$n_seeds_per_fl))
 data_selag$prop_seeds_esc_s<-scale(data_selag$prop_seeds_esc)
-data_selag<-as.data.frame(data_selag %>% group_by(year) %>%
-  mutate(n_intact_seeds_rel=n_intact_seeds/mean(n_intact_seeds,na.rm=T))%>%  #Relative fitness
-  mutate(FFD_std=(FFD-mean(FFD,na.rm=T))/sd(FFD,na.rm=T)) %>%                #Standardized FFD
-  mutate(n_fl_std=(n_fl-mean(n_fl,na.rm=T))/sd(n_fl,na.rm=T)))               #Standardized n_fl
+
 ```
 
 ```{r}
@@ -341,85 +528,6 @@ kable(summary(mod_n_intact_seeds3_GLMM)$coefficients)
 # Number of intact seeds <- n_fl 0.326 *
 # Number of intact seeds <- n_seeds_per_fl_round 0.520 *
 # Number of intact seeds <- prop_pred_seeds 0.705 *
-```
-
-# Relationship N seeds per fl ~ grazing with different measures
-
-```{r}
-# All years
-summary(bglmer(n_seeds_per_fl_round~grazing_corr+(1|id),data_selag,family="poisson")) 
-# Years with grazing = proportion of flowers removed
-summary(bglmer(n_seeds_per_fl_round~grazing_corr+(1|id),
-              subset(data_selag,year<1997|year>2015),family="poisson")) 
-# Years with grazing = proportion of grazed shoots
-summary(bglmer(n_seeds_per_fl_round~grazing_corr+(1|id),
-              subset(data_selag,year==2006),family="poisson")) 
-# Years with grazing = proportion aboveground volume removed
-summary(bglmer(n_seeds_per_fl_round~grazing_corr+(1|id),
-              subset(data_selag,year>2006&year<2016),family="poisson")) 
-# Coefs: -2.213, -2.667, -0.055 (NS), -3.311
-```
-
-```{r echo=FALSE, message=FALSE, warning=FALSE}
-ggplot()+my_theme()+
-    geom_point(data=as.data.frame(effect(term= "grazing_corr",
-                                      mod=bglmer(n_seeds_per_fl_round~grazing_corr+(1|id),
-                                                data_selag,family="poisson"))),
-             aes(x=grazing_corr, y=fit), color="black") +  
-  ylab("N seeds per fl (model estimate)") +
-    geom_line(data=as.data.frame(effect(term= "grazing_corr",
-                                        mod= bglmer(n_seeds_per_fl_round~grazing_corr+(1|id),
-                                                data_selag,family="poisson"))),
-            aes(x=grazing_corr, y=fit), color="black") +
-    geom_ribbon(data=as.data.frame(effect(term= "grazing_corr", 
-                                          mod= bglmer(n_seeds_per_fl_round~grazing_corr+(1|id),
-                                                data_selag,family="poisson"))),
-              aes(x=grazing_corr, ymin=lower, ymax=upper), alpha= 0.3, fill="black")+
-  geom_point(data=as.data.frame(effect(term= "grazing_corr",
-                                      mod=bglmer(n_seeds_per_fl_round~grazing_corr+(1|id),
-                                                subset(data_selag,year<1997|year>2015),
-                                                family="poisson"))),
-             aes(x=grazing_corr, y=fit), color="blue") +   
-    geom_line(data=as.data.frame(effect(term= "grazing_corr",
-                                        mod= bglmer(n_seeds_per_fl_round~grazing_corr+(1|id),
-                                                subset(data_selag,year<1997|year>2015),
-                                                family="poisson"))),
-            aes(x=grazing_corr, y=fit), color="blue") +
-    geom_ribbon(data=as.data.frame(effect(term= "grazing_corr", 
-                                          mod= bglmer(n_seeds_per_fl_round~grazing_corr+(1|id),
-                                                subset(data_selag,year<1997|year>2015),
-                                                family="poisson"))),
-              aes(x=grazing_corr, ymin=lower, ymax=upper), alpha= 0.3, fill="blue")+
-  geom_point(data=as.data.frame(effect(term= "grazing_corr",
-                                      mod=bglmer(n_seeds_per_fl_round~grazing_corr+(1|id),
-                                                subset(data_selag,year==2006),
-                                                family="poisson"))),
-             aes(x=grazing_corr, y=fit), color="green") +   
-    geom_line(data=as.data.frame(effect(term= "grazing_corr",
-                                        mod= bglmer(n_seeds_per_fl_round~grazing_corr+(1|id),
-                                                subset(data_selag,year==2006),
-                                                family="poisson"))),
-            aes(x=grazing_corr, y=fit), color="green") +
-    geom_ribbon(data=as.data.frame(effect(term= "grazing_corr", 
-                                          mod= bglmer(n_seeds_per_fl_round~grazing_corr+(1|id),
-                                                subset(data_selag,year==2006),
-                                                family="poisson"))),
-              aes(x=grazing_corr, ymin=lower, ymax=upper), alpha= 0.3, fill="green")+
-  geom_point(data=as.data.frame(effect(term= "grazing_corr",
-                                      mod=bglmer(n_seeds_per_fl_round~grazing_corr+(1|id),
-                                                subset(data_selag,year>2006&year<2016),
-                                                family="poisson"))),
-             aes(x=grazing_corr, y=fit), color="red") +   
-    geom_line(data=as.data.frame(effect(term= "grazing_corr",
-                                        mod= bglmer(n_seeds_per_fl_round~grazing_corr+(1|id),
-                                                subset(data_selag,year>2006&year<2016),
-                                                family="poisson"))),
-            aes(x=grazing_corr, y=fit), color="red") +
-    geom_ribbon(data=as.data.frame(effect(term= "grazing_corr", 
-                                          mod= bglmer(n_seeds_per_fl_round~grazing_corr+(1|id),
-                                                subset(data_selag,year>2006&year<2016),
-                                                family="poisson"))),
-              aes(x=grazing_corr, ymin=lower, ymax=upper), alpha= 0.3, fill="red")
 ```
 
 # Graphs to be included in the paper (to be modified based on final path model)
@@ -607,72 +715,6 @@ mod_prop_seeds_esc_noclim_GLMM<-glmer(cbind(round(n_intact_seeds),round(n_pred_s
 kable(summary(mod_prop_seeds_esc_noclim_GLM)$coefficients,digits=c(3,3,2,3))
 kable(summary(mod_prop_seeds_esc_noclim_GLMM)$coefficients,,digits=c(3,3,2,3))
 ```
-
-# Effects of yearly intensity of interactions on selection
-
-## Model with pollination (residuals) and grazing
-
-Because grazing influences (decreases) the number of seeds per flower. 
-
-```{r}
-data_selag$n_seeds_per_fl_res<-with(data_selag,ifelse(is.na(n_seeds_per_fl),NA,
-                                           residuals(lm(n_seeds_per_fl~grazing_corr,
-                                               data=data_selag))))
-mod_int_sel1_GLM<-lm(n_intact_seeds_rel ~ FFD_std+n_fl_std+n_seeds_per_fl_res+grazing_corr+
-               FFD_std:n_seeds_per_fl_res+FFD_std:grazing_corr,data_selag)
-mod_int_sel1_GLMM<-lmer(n_intact_seeds_rel ~ FFD_std+n_fl_std+n_seeds_per_fl_res+grazing_corr+
-               FFD_std:n_seeds_per_fl_res+FFD_std:grazing_corr+(1|id),data_selag)
-kable(summary(mod_int_sel1_GLM)$coefficients,digits=c(3,3,2,3))
-kable(summary(mod_int_sel1_GLMM)$coefficients,digits=c(3,3,1,2,3))
-```
-
-Significant effect of grazing, but not of pollination, on selection.
-
-## Model with all three interactions (residuals of pollination)
-
-```{r}
-mod_int_sel2_GLM<-lm(n_intact_seeds_rel ~ FFD_std+n_fl_std+
-                     n_seeds_per_fl_res+grazing_corr+prop_seeds_esc+
-                     FFD_std:n_seeds_per_fl_res+FFD_std:grazing_corr+FFD_std:prop_seeds_esc,
-                     data_selag)
-mod_int_sel2_GLMM<-lmer(n_intact_seeds_rel ~ FFD_std+n_fl_std+
-                     n_seeds_per_fl_res+grazing_corr+prop_seeds_esc+
-                     FFD_std:n_seeds_per_fl_res+FFD_std:grazing_corr+FFD_std:prop_seeds_esc+
-                     (1|id),data_selag)
-kable(summary(mod_int_sel2_GLM)$coefficients,digits=c(3,3,2,3))
-kable(summary(mod_int_sel2_GLMM)$coefficients,digits=c(3,3,1,2,3))
-```
-
-### Graphs of interaction effects (to be modified based on choice of GLMs or GLMMs)
-
-```{r fig.height=5, fig.width=6, message=FALSE, warning=FALSE}
-interaction1<-data.frame(effect(term="FFD_std:grazing_corr",mod=mod_int_sel1_GLMM,
-                       xlevels=list(FFD_std=seq(-2.8,3.3,0.1),
-                                    grazing_corr=seq(0,1,0.05))))
-interaction1$fit_mod<-with(interaction1,ifelse(fit<0,0,fit))
-
-myPalette <- colorRampPalette(brewer.pal(11, "YlOrRd"))
-ggplot(interaction1, aes(FFD_std,fit_mod, group = as.factor(grazing_corr)))+
-  geom_smooth(method=lm,se=F,size=0.5,aes(FFD_std,fit_mod,color=grazing_corr))+
-  xlab("Standardized first flowering date")+ylab("Relative number of intact seeds")+
-  my_theme()+scale_colour_gradientn(colours = myPalette(100))+
-  theme(legend.position="top")+labs(colour="Proportion of grazing")
-```
-
-```{r fig.height=5, fig.width=6, message=FALSE, warning=FALSE}
-interaction2<-data.frame(effect(term="FFD_std:prop_seeds_esc",mod=mod_int_sel2_GLMM,
-                       xlevels=list(FFD_std=seq(-2.8,3.3,0.1),
-                                    prop_seeds_esc=seq(0,1,0.05))))
-interaction2$fit_mod<-with(interaction2,ifelse(fit<0,0,fit))
-
-ggplot(interaction2, aes(FFD_std,fit_mod, group = as.factor(prop_seeds_esc)))+
-  geom_smooth(method=lm,se=F,size=0.5,aes(FFD_std,fit_mod,color=prop_seeds_esc))+
-  xlab("Standardized first flowering date")+ylab("Relative number of intact seeds")+
-  my_theme()+scale_colour_gradientn(colours = myPalette(100))+
-  theme(legend.position="top")+labs(colour="Proportion of seeds that escaped predation")
-```
-
-
 
 
 
