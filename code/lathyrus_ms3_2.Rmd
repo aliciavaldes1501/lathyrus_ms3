@@ -643,7 +643,7 @@ testResiduals(simulationOutput_globmod_seedsperfl_B)
 
 ## Graphs
 
-Fit models with all non-scaled variables, but keep FFD_s_y. When FFD_s_y is significant, effects are taken form models with FFD_mean and FFD_sd.
+Fit models with all non-scaled variables, but keep FFD_s_y. When FFD_s_y is significant, effects are taken from models with temperatures (i.e. "A" models).
 
 ```{r}
 globmod_grazing1_A_ns<-glmmTMB(cbind(grazing_success,grazing_failure)~(mean_3+mean_4+mean_5)*FFD_s_y+
@@ -666,127 +666,139 @@ globmod_pred_GLM1_B_ns<-glmmTMB(cbind(round(n_pred_seeds),round(n_intact_seeds))
                            data=data_selag_subset2,family=betabinomial,na.action="na.fail")
 ```
 
-```{r}
-ef1<-ggpredict(globmod_grazing1_A_ns,terms = "mean_3 [all]")
-ef2<-ggpredict(globmod_grazing1_A_ns,terms = "mean_4 [all]")
-ef3<-ggpredict(globmod_grazing1_A_ns,terms = "mean_5 [all]")
-ef4<-ggpredict(globmod_pred_GLM1_A_ns,terms = "mean_3 [all]")
-ef5<-ggpredict(globmod_pred_GLM1_A_ns,terms = "mean_5 [all]")
-ef6<-ggpredict(globmod_pred_GLM1_A_ns,terms = "mean_6 [all]")
-```
-
-```{r echo=FALSE, fig.height=4, fig.width=16, message=FALSE, warning=FALSE}
-# Fig. 1: Grazing
-fig1<-grid.arrange(
-# Grazing <- Individual FFD
-ggpredict(globmod_grazing1_B_ns,terms = "FFD_s_y [all]")%>%
-  ggplot(aes(x,predicted))+geom_ribbon(aes(ymin=conf.low,ymax=conf.high),fill="grey")+
-  geom_line(color="black",size=1)+ggtitle("A)")+
-  my_theme()+xlab("FFD (standardized within years)")+ylab(NULL)+
-  theme(plot.title=element_text(hjust=-0.2,vjust=-3)),
-# Grazing <- Temperature March
-ggpredict(globmod_grazing1_A_ns,terms = "mean_3 [all]")%>%
-  ggplot(aes(x,predicted))+geom_ribbon(aes(ymin=conf.low,ymax=conf.high),fill="grey")+
-  geom_line(color="black",size=1)+ggtitle("B)")+
-  my_theme()+xlab("March temperature")+ylab(NULL)+
-  theme(plot.title=element_text(hjust=-0.2,vjust=-3)),
-# Grazing <- Temperature April
-ggpredict(globmod_grazing1_A_ns,terms = "mean_4 [all]")%>%
-  ggplot(aes(x,predicted))+geom_ribbon(aes(ymin=conf.low,ymax=conf.high),fill="grey")+
-  geom_line(color="black",size=1)+ggtitle("C)")+
-  my_theme()+xlab("April temperature")+ylab(NULL)+
-  theme(plot.title=element_text(hjust=-0.2,vjust=-3)),
-# Grazing <- Temperature May
-ggpredict(globmod_grazing1_A_ns,terms = "mean_5 [all]")%>%
-  ggplot(aes(x,predicted))+geom_ribbon(aes(ymin=conf.low,ymax=conf.high),fill="grey")+
-  geom_line(color="black",size=1)+ggtitle("D)")+
-  my_theme()+xlab("May temperature")+ylab(NULL)+
-  theme(plot.title=element_text(hjust=-0.2,vjust=-3)),
-ncol=4,left=textGrob("Predicted grazing",just="center",hjust=0.42,
-                     gp=gpar(fontsize=16,fontfamily="serif"),rot = 90))
-ggsave(filename=
-          "C:/Users/User/Dropbox/SU/Projects/lathyrus/lathyrus_ms3/results/figures/Figure_1.tiff",
-        plot=fig1,device="tiff",width=34,height=8.5,units="cm",dpi=100,compression="lzw")
-```
-
 ```{r echo=FALSE, fig.height=4, fig.width=12, message=FALSE, warning=FALSE}
-# Fig. 2: Number of seeds per flower
-fig2<-grid.arrange(
-  # N seeds per fl <- Individual FFD
-ggpredict(globmod_seedsperfl_B_ns,terms = "FFD_s_y [all]")%>%
-  ggplot(aes(x,predicted))+geom_ribbon(aes(ymin=conf.low,ymax=conf.high),fill="grey")+
-  geom_line(color="black",size=1)+ggtitle("A)")+
-  my_theme()+xlab("FFD (standardized within years)")+ylab(NULL)+
-  theme(plot.title=element_text(hjust=-0.15,vjust=1)),
-# N seeds per fl <- SD FFD
+# Fig. 1: Mean and SD of FFD
+fig1<-grid.arrange(
+  # N seeds per fl <- SD FFD
 ggpredict(globmod_seedsperfl_B_ns,terms = "FFD_sd [all]")%>%
   ggplot(aes(x,predicted))+geom_ribbon(aes(ymin=conf.low,ymax=conf.high),fill="grey")+
-  geom_line(color="black",size=1)+ggtitle("B)")+
-  my_theme()+xlab("Yearly standard deviation of FFD")+ylab(NULL)+
-  theme(plot.title=element_text(hjust=-0.2,vjust=1)),
-# N seeds per fl <- Temperature May
-ggpredict(globmod_seedsperfl_A_ns,terms = "mean_5 [all]")%>%
-  ggplot(aes(x,predicted))+geom_ribbon(aes(ymin=conf.low,ymax=conf.high),fill="grey")+
-  geom_line(color="black",size=1)+ggtitle("C)")+
-  my_theme()+xlab("May temperature")+ylab(NULL)+
-  theme(plot.title=element_text(hjust=-0.2,vjust=1)),
-ncol=3,left=textGrob("Predicted number of\nseeds per flower",just="center",hjust=0.42,
-                     gp=gpar(fontsize=16,fontfamily="serif"),rot = 90))
-ggsave(filename=
-          "C:/Users/User/Dropbox/SU/Projects/lathyrus/lathyrus_ms3/results/figures/Figure_2.tiff",
-        plot=fig2,device="tiff",width=28,height=8.5,units="cm",dpi=100,compression="lzw")
-```
-
-```{r echo=FALSE, fig.height=8, fig.width=12, message=FALSE, warning=FALSE}
-myPalette <- colorRampPalette(brewer.pal(11, "YlOrRd"))
-# Fig. 3: Seed predation
-fig3<-grid.arrange(
-  # Predation <- Mean FFD
+  geom_line(color="black",size=1)+ggtitle("A)")+
+  my_theme()+xlab("Yearly standard deviation of FFD")+ylab("Predicted number of\nseeds per flower")+
+  theme(plot.title=element_text(hjust=-0.15,vjust=1)),
+# Predation <- Mean FFD
 ggpredict(globmod_pred_GLM1_B_ns,terms = "FFD_mean [all]")%>%
   ggplot(aes(x,predicted))+geom_ribbon(aes(ymin=conf.low,ymax=conf.high),fill="grey")+
-  geom_line(color="black",size=1)+ggtitle("A)")+
-  my_theme()+xlab("Yearly mean of FFD")+ylab(NULL)+
-  theme(plot.title=element_text(hjust=-0.15,vjust=0)),
+  geom_line(color="black",size=1)+ggtitle("B)")+
+  my_theme()+xlab("Yearly mean of FFD")+ylab("Predicted seed predation")+
+  theme(plot.title=element_text(hjust=-0.15,vjust=1)),
 # Predation <- SD FFD
 ggpredict(globmod_pred_GLM1_B_ns,terms = "FFD_sd [all]")%>%
   ggplot(aes(x,predicted))+geom_ribbon(aes(ymin=conf.low,ymax=conf.high),fill="grey")+
-  geom_line(color="black",size=1)+ggtitle("B)")+
-  my_theme()+xlab("Yearly standard deviation of FFD")+ylab(NULL)+
-  theme(plot.title=element_text(hjust=-0.15,vjust=0)),
+  geom_line(color="black",size=1)+ggtitle("C)")+
+  my_theme()+xlab("Yearly standard deviation of FFD")+ylab("Predicted seed predation")+
+  theme(plot.title=element_text(hjust=-0.15,vjust=1)),
+ncol=3)
+ggsave(filename=
+          "C:/Users/User/Dropbox/SU/Projects/lathyrus/lathyrus_ms3/results/figures/Figure_1.tiff",
+        plot=fig1,device="tiff",width=30,height=9,units="cm",dpi=300,compression="lzw")
+```
+
+```{r echo=FALSE, fig.height=4, fig.width=12, message=FALSE, warning=FALSE}
+# Fig. 2: Temperatures
+
+fig2a<-grid.arrange(
+  # Grazing <- Temperature March
+ggpredict(globmod_grazing1_A_ns,terms = "mean_3 [all]")%>%
+  ggplot(aes(x,predicted))+geom_ribbon(aes(ymin=conf.low,ymax=conf.high),fill="grey")+
+  geom_line(color="black",size=1)+ggtitle("A) Grazing")+
+  my_theme()+xlab(NULL)+ylab(NULL)+
+  theme(plot.title=element_text(hjust=0,vjust=1))+
+  labs(subtitle = "March")+theme(plot.subtitle = element_text(hjust = 0.5,margin=margin(t=10,b=-20))),
+# Grazing <- Temperature April
+ggpredict(globmod_grazing1_A_ns,terms = "mean_4 [all]")%>%
+  ggplot(aes(x,predicted))+geom_ribbon(aes(ymin=conf.low,ymax=conf.high),fill="grey")+
+  geom_line(color="black",size=1)+ggtitle("blank")+
+  my_theme()+xlab(NULL)+ylab(NULL)+
+  theme(plot.title=element_text(hjust=0,vjust=1,color="white"))+
+  labs(subtitle = "April")+theme(plot.subtitle = element_text(hjust = 0.5,margin=margin(t=10,b=-20))),
+# Grazing <- Temperature May
+ggpredict(globmod_grazing1_A_ns,terms = "mean_5 [all]")%>%
+  ggplot(aes(x,predicted))+geom_ribbon(aes(ymin=conf.low,ymax=conf.high),fill="grey")+
+  geom_line(color="black",size=1)+ggtitle("blank")+
+  my_theme()+xlab(NULL)+ylab(NULL)+
+  theme(plot.title=element_text(hjust=0,vjust=1,color="white"))+
+  labs(subtitle = "May")+theme(plot.subtitle = element_text(hjust = 0.5,margin=margin(t=10,b=-20))),
+ncol=3)
+
+fig2b<-grid.arrange(
+# N seeds per fl <- Temperature May
+ggpredict(globmod_seedsperfl_A_ns,terms = "mean_5 [all]")%>%
+  ggplot(aes(x,predicted))+geom_ribbon(aes(ymin=conf.low,ymax=conf.high),fill="grey")+
+  geom_line(color="black",size=1)+ggtitle("B) Number of seeds per flower")+
+  my_theme()+xlab(NULL)+ylab(NULL)+
+  theme(plot.title=element_text(hjust=0,vjust=1))+
+  labs(subtitle = "May")+theme(plot.subtitle = element_text(hjust = 0.5,margin=margin(t=10,b=-20))),
+# Blank plot
+ggplot() + theme_void(),
+# Blank plot
+ggplot() + theme_void(),
+ncol=3)
+
+fig2c<-grid.arrange(
 # Predation <- Temperature March
 ggpredict(globmod_pred_GLM1_A_ns,terms = "mean_3 [all]")%>%
   ggplot(aes(x,predicted))+geom_ribbon(aes(ymin=conf.low,ymax=conf.high),fill="grey")+
-  geom_line(color="black",size=1)+ggtitle("C)")+
-  my_theme()+xlab("March temperature")+ylab(NULL)+
-  theme(plot.title=element_text(hjust=-0.15,vjust=0)),
+  geom_line(color="black",size=1)+ggtitle("C) Seed predation")+
+  my_theme()+xlab(NULL)+ylab(NULL)+
+  theme(plot.title=element_text(hjust=0,vjust=1))+
+  labs(subtitle = "March")+theme(plot.subtitle = element_text(hjust = 0.5,margin=margin(t=10,b=-20))),
 # Predation <- Temperature May
 ggpredict(globmod_pred_GLM1_A_ns,terms = "mean_5 [all]")%>%
   ggplot(aes(x,predicted))+geom_ribbon(aes(ymin=conf.low,ymax=conf.high),fill="grey")+
-  geom_line(color="black",size=1)+ggtitle("D)")+
-  my_theme()+xlab("May temperature")+ylab(NULL)+
-  theme(plot.title=element_text(hjust=-0.15,vjust=0)),
+  geom_line(color="black",size=1)+ggtitle("blank")+
+  my_theme()+xlab(NULL)+ylab(NULL)+
+  theme(plot.title=element_text(hjust=0,vjust=1,color="white"))+
+  labs(subtitle = "May")+theme(plot.subtitle = element_text(hjust = 0.5,margin=margin(t=10,b=-20))),
 # Predation <- Temperature June
 ggpredict(globmod_pred_GLM1_A_ns,terms = "mean_6 [all]")%>%
   ggplot(aes(x,predicted))+geom_ribbon(aes(ymin=conf.low,ymax=conf.high),fill="grey")+
-  geom_line(color="black",size=1)+ggtitle("E)")+
-  my_theme()+xlab("June temperature")+ylab(NULL)+
-  theme(plot.title=element_text(hjust=-0.15,vjust=0)),
+  geom_line(color="black",size=1)+ggtitle("blank")+
+  my_theme()+xlab(NULL)+ylab(NULL)+
+  theme(plot.title=element_text(hjust=0,vjust=1,color="white"))+
+  labs(subtitle = "June")+theme(plot.subtitle = element_text(hjust = 0.5,margin=margin(t=10,b=-20))),
+ncol=3)
+
+fig2<-grid.arrange(fig2a,fig2b,fig2c,
+                   nrow=3,
+                   bottom=textGrob("Temperature (ºC)",gp=gpar(fontsize=20,fontfamily="serif")),
+                   left=textGrob("Predicted interaction intensity",just="center",hjust=0.48,
+                                 gp=gpar(fontsize=20,fontfamily="serif"),rot=90))
+plot(fig2)
+ggsave(filename=
+          "C:/Users/User/Dropbox/SU/Projects/lathyrus/lathyrus_ms3/results/figures/Figure_2.tiff",
+        plot=fig2,device="tiff",width=30,height=27,units="cm",dpi=300,compression="lzw")
+```
+
+```{r echo=FALSE, fig.height=4, fig.width=12, message=FALSE, warning=FALSE}
+# Fig. 3: Individual FFD
+fig3<-grid.arrange(
+  # Grazing <- Individual FFD
+ggpredict(globmod_grazing1_A_ns,terms = "FFD_s_y [all]")%>%
+  ggplot(aes(x,predicted))+geom_ribbon(aes(ymin=conf.low,ymax=conf.high),fill="grey")+
+  geom_line(color="black",size=1)+ggtitle("A)")+
+  my_theme()+xlab(NULL)+ylab("Predicted grazing")+
+  theme(plot.title=element_text(hjust=-0.15,vjust=1)),
+ggpredict(globmod_seedsperfl_A_ns,terms = "FFD_s_y [all]")%>%
+  ggplot(aes(x,predicted))+geom_ribbon(aes(ymin=conf.low,ymax=conf.high),fill="grey")+
+  geom_line(color="black",size=1)+ggtitle("B)")+
+  my_theme()+xlab(NULL)+ylab("Predicted number of\nseeds per flower")+
+  theme(plot.title=element_text(hjust=-0.15,vjust=1)),
 # Predation <- Temperature April * FFD
 ggpredict(globmod_pred_GLM1_A_ns,terms = c("FFD_s_y [all]","mean_4 [all]"))%>%
   ggplot(aes(x,predicted, ymin = conf.low, ymax = conf.high, colour = group, fill = group))+
   geom_line(aes(color=as.numeric(as.character(group))),size=0.6) + 
   scale_colour_gradientn(colours = myPalette(100)) +
-  my_theme()+xlab("FFD (standardized within years)")+ylab(NULL)+
-  theme(plot.title=element_text(hjust=-0.15,vjust=0))+ggtitle("F)")+
+  my_theme()+xlab(NULL)+ylab("Predicted seed predation")+
+  theme(plot.title=element_text(hjust=-0.15,vjust=1))+ggtitle("C)")+
   theme(legend.justification=c(1.1,0.99),legend.position=c(1.1,0.99),
         legend.direction="horizontal")+labs(colour="April temperature")+
    guides(colour = guide_colourbar(title.position="top",title.hjust = 7,barheight=0.7))+
   theme(legend.background = element_rect(fill=alpha('blue', 0))),
-ncol=3,left=textGrob("Predicted seed predation",just="center",hjust=0.42,
-                     gp=gpar(fontsize=16,fontfamily="serif"),rot = 90))
+ncol=3,bottom=textGrob("First flowering date (standardized within years)",just="center",hjust=0.45,
+                       gp=gpar(fontsize=16,fontfamily="serif")))
 ggsave(filename=
           "C:/Users/User/Dropbox/SU/Projects/lathyrus/lathyrus_ms3/results/figures/Figure_3.tiff",
-        plot=fig3,device="tiff",width=28,height=17,units="cm",dpi=100,compression="lzw")
+        plot=fig3,device="tiff",width=30,height=9,units="cm",dpi=300,compression="lzw")
 ```
 
 # 3. How the three interactions affect fitness
@@ -835,6 +847,18 @@ mod_int_sel_GLMM<-glmmTMB(n_intact_seeds_rel_y ~ FFD_s_y+n_fl_s_y+
                          FFD_s_y:grazing_mean_s+
                          FFD_s_y:prop_pred_seeds_mean_s+
                          (1|id),data_selag,family="gaussian")
+mod_int_sel_GLMM<-lmer(n_intact_seeds_rel_y ~ FFD_s_y+n_fl_s_y+
+                         FFD_s_y:n_seeds_per_fl_res_mean_s+
+                         FFD_s_y:grazing_mean_s+
+                         FFD_s_y:prop_pred_seeds_mean_s+
+                         (1|id),data_selag)
+mod_int_sel_LM<-lm(n_intact_seeds_rel_y ~ FFD_s_y+n_fl_s_y+
+                         FFD_s_y:n_seeds_per_fl_res_mean_s+
+                         FFD_s_y:grazing_mean_s+
+                         FFD_s_y:prop_pred_seeds_mean_s,
+                   subset(data_selag,!is.na(n_intact_seeds_rel_y)&!is.na(FFD_s_y)&!is.na(n_fl_s_y)&
+                            !is.na(n_seeds_per_fl_res_mean_s)&!is.na(grazing_mean_s)&
+                            !is.na(prop_pred_seeds_mean_s)))
 # Results of models (t-tests)
 kable(summary(mod_int_sel_GLMM)$coefficients,digits=c(3,3,1,2,3))
 # Analysis of deviance (Wald chi‐square tests for GLMM)
@@ -842,6 +866,117 @@ kable(Anova(mod_int_sel_GLMM))
 ```
 
 Significant effect of grazing on selection (but we have seen that the significance is driven by the year 2017).
+
+#### Model diagnostics with DHARMa
+
+Simulate residuals of the model:
+
+```{r}
+simulationOutput_mod_int_sel_GLMM <- 
+  simulateResiduals(fittedModel = mod_int_sel_GLMM, n = 5000)
+```
+
+qq-plot  and plot of residuals vs. predicted:
+
+```{r}
+plot(simulationOutput_mod_int_sel_GLMM)
+```
+
+```{r}
+testDispersion(simulationOutput_mod_int_sel_GLMM)
+```
+
+```{r}
+testZeroInflation(simulationOutput_mod_int_sel_GLMM)
+```
+
+```{r}
+hist(simulationOutput_mod_int_sel_GLMM)
+```
+
+```{r}
+testResiduals(simulationOutput_mod_int_sel_GLMM)
+```
+
+#### Bootstraped confidence intervals
+
+##### Mixed model
+
+```{r}
+b_par<-bootMer(x=mod_int_sel_GLMM,FUN=fixef,nsim=10000)
+```
+
+
+```{r}
+confint(b_par,level=0.95, method="boot") # Percentile method
+```
+
+##### LM (Elsa's code)
+
+```{r}
+# FFD_s_y
+slp <- function(mod_int_sel_LM) coef(mod_int_sel_LM)[2]
+b <- car::Boot(mod_int_sel_LM,slp, R=10000) # note the capital B
+b1 <- boot::boot.ci(b,type="bca")
+FFD_s_y_ci <- as.data.frame(b1$bca[1,4:5])
+rm(slp, b, b1)
+```
+
+```{r}
+# n_fl_s_y
+slp <- function(mod_int_sel_LM) coef(mod_int_sel_LM)[3]
+b <- car::Boot(mod_int_sel_LM,slp, R=10000) # note the capital B
+b1 <- boot::boot.ci(b,type="bca")
+n_fl_s_y_ci <- as.data.frame(b1$bca[1,4:5])
+rm(slp, b, b1)
+```
+
+```{r}
+# FFD_s_y:n_seeds_per_fl_res_mean_s
+slp <- function(mod_int_sel_LM) coef(mod_int_sel_LM)[4]
+b <- car::Boot(mod_int_sel_LM,slp, R=10000) # note the capital B
+b1 <- boot::boot.ci(b,type="bca")
+FFD_s_y_seedl_ci <- as.data.frame(b1$bca[1,4:5])
+rm(slp, b, b1)
+```
+
+```{r}
+# FFD_s_y:grazing_mean_s
+slp <- function(mod_int_sel_LM) coef(mod_int_sel_LM)[5]
+b <- car::Boot(mod_int_sel_LM,slp, R=10000) # note the capital B
+b1 <- boot::boot.ci(b,type="bca")
+FFD_s_y_graz_ci <- as.data.frame(b1$bca[1,4:5])
+rm(slp, b, b1)
+```
+
+```{r}
+# prop_pred_seeds_mean_s
+slp <- function(mod_int_sel_LM) coef(mod_int_sel_LM)[6]
+b <- car::Boot(mod_int_sel_LM,slp, R=10000) # note the capital B
+b1 <- boot::boot.ci(b,type="bca")
+FFD_s_y_pred_ci <- as.data.frame(b1$bca[1,4:5])
+rm(slp, b, b1)
+```
+
+```{r}
+# Save confidence intervals as a table
+lower_A <- rbind(FFD_s_y_ci[1,] ,n_fl_s_y_ci[1,])
+lower_B <- rbind(lower_A ,FFD_s_y_seedl_ci[1,])
+lower_C <- rbind(lower_B ,FFD_s_y_graz_ci[1,])
+lower_D <- rbind(lower_C ,FFD_s_y_pred_ci[1,])
+lower <- lower_D
+
+upper_A <- rbind(FFD_s_y_ci[2,] ,n_fl_s_y_ci[2,])
+upper_B <- rbind(upper_A ,FFD_s_y_seedl_ci[2,])
+upper_C <- rbind(upper_B ,FFD_s_y_graz_ci[2,])
+upper_D <- rbind(upper_C ,FFD_s_y_pred_ci[2,])
+upper <- upper_D
+
+
+BCIs_mod_int_sel_LM <- cbind(lower, upper) 
+rownames(BCIs_mod_int_sel_LM) <- c("FFD_s_y","n_fl_s_y","FFD_s_y:seedfl",
+                                   "FFD_s_y:graz","FFD_s_y:pred")
+```
 
 ### Negative binomial distribution with offset
 
@@ -874,8 +1009,8 @@ ggpredict(mod_int_sel_GLMM_nsints,terms = c("FFD_s_y [all]","grazing_mean [quart
   scale_color_manual(values=c("#d7191c","#fdae61","#ffffbf","#abdda4","#2b83ba"))+
   xlab("FFD (standardized within years)")+ylab("Predicted number of intact seeds")
 ggsave(filename=
-          "C:/Users/User/Dropbox/SU/Projects/lathyrus/lathyrus_ms3/results/figures/Figure_4_OLD.tiff",
-        device="tiff",width=130,height=100,units="mm",dpi=100,compression="lzw")
+          "C:/Users/User/Dropbox/SU/Projects/lathyrus/lathyrus_ms3/results/figures/Figure_4.tiff",
+        device="tiff",width=12,height=9,units="cm",dpi=300,compression="lzw")
 ```
 
 The slope of the relationship among fitness and FFD is more positive in years with higher proportions of grazing → selection for later flowering in those years
@@ -900,7 +1035,7 @@ ggpredict(mod_int_sel_GLMM_nsints2,terms = c("FFD_s_y [all]","prop_pred_seeds_me
 ncol=2,left=textGrob("Predicted number of intact seeds",just="center",hjust=0.50,
                      gp=gpar(fontsize=16,fontfamily="serif"),rot = 90))
 ggsave(filename=
-          "C:/Users/User/Dropbox/SU/Projects/lathyrus/lathyrus_ms3/results/figures/Figure_4.tiff",
+          "C:/Users/User/Dropbox/SU/Projects/lathyrus/lathyrus_ms3/results/figures/Figure_4_OLD.tiff",
         plot=fig4,device="tiff",width=260,height=120,units="mm",dpi=100,compression="lzw")
 ```
 

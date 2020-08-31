@@ -1,0 +1,323 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r}
+#https://www.researchgate.net/post/How_do_you_measure_phenotypic_selection_gradients
+```
+
+
+```{r load packages, include=FALSE}
+library(tidyverse)
+library(lubridate) # ymd, hms and yday functions
+library(car)
+library(grid) #textGrob, gpar
+```
+
+
+```{r load data, include=FALSE}
+
+dat <- read_delim("../../DataPreparation/LvKalso13-15_allData_01.txt", "\t", guess_max = 3000) 
+
+
+dat1 <- dat %>% 
+  
+  ####################################
+  # select individuals without estimates
+  # of volume, leaf-out, FFD and fitness
+
+  filter(omitSpringDev == 0,
+         !is.na(abovegroundVolume),
+         !is.na(leafOutDOY),
+         !is.na(FFD),
+         !is.na(nIntactSeeds)) %>% 
+  
+  ##########################################
+  # filter variables to be used for analyses
+  # and subsetting
+  select(Individnr:year, 
+         grazed, starts_with('source'),
+         abovegroundVolume,  
+         leafOutDOY,
+         FFD,
+         avPropPredSeeds,
+         nIntactSeeds) %>% 
+  ##########################################
+  # Transform variables
+  group_by(year) %>% 
+  mutate(lnSize = log(abovegroundVolume),
+         
+         scLnSize = c(scale(lnSize)),
+         scLeafOutDOY = c(scale(leafOutDOY)),
+         scFFD = c(scale(FFD)),
+         
+         relNIntactSeeds = nIntactSeeds/mean(nIntactSeeds, na.rm = TRUE))
+  
+  
+summary(dat1)
+
+dat13 <- dat1 %>% filter(year == 2013) 
+
+# Double-check that scaling function
+# has worked as it should - it did
+#%>% 
+#  mutate(scaleFFD2 = c(scale(FFD)),
+#         scaleFFD3 = (FFD - mean(FFD, na.rm = TRUE))/sd(FFD, na.rm = TRUE) )
+
+
+
+dat14 <- dat1 %>% filter(year == 2014)
+dat15 <- dat1 %>% filter(year == 2015)
+
+```
+
+# 4. L-O & FFD GRADS
+
+## 4.1 2013 
+
+### 4.1.1 Selection analysis using linear regression
+
+```{r linear gradients LO & FFD-13}
+#######################
+# Selection gradients
+#######################
+
+gradModLOFFD13L <- lm(relNIntactSeeds ~ 
+             scLeafOutDOY +
+             scFFD +
+             scLnSize,
+           data = dat13)
+
+
+# #step(mod1) # gives the same resulting model
+summary(gradModLOFFD13L)
+drop1(gradModLOFFD13L, test = 'Chisq')
+
+par(mfrow = c(2,2))
+plot(gradModLOFFD13L)
+```
+
+```{r quadratic gradients LO & FFD-13}
+#######################
+# Selection gradients
+#######################
+
+gradModLOFFD13Q <- lm(relNIntactSeeds ~ 
+             scLeafOutDOY + I(scLeafOutDOY^2) +
+             scFFD + I(scFFD^2) +
+             scLnSize +
+             scLeafOutDOY:scFFD,
+           data = dat13)
+
+summary(gradModLOFFD13Q)
+
+par(mfrow = c(2,2))
+plot(gradModLOFFD13Q)
+```
+
+#### 4.1.1.3 Compile results into a table   
+
+```{r lm table LO & FFD 13}
+
+###################################
+# Extract the coefficients from
+# the linear models
+
+coefs_A <- summary(gradModLOFFD13L)$coefficients[2,] # LeafOut
+coefs_B <- summary(gradModLOFFD13L)$coefficients[3,] # FFD
+coefs_C <- summary(gradModLOFFD13L)$coefficients[4,] # Vol
+coefs_D <- summary(gradModLOFFD13Q)$coefficients[3,] # LeafOut^2
+coefs_E <- summary(gradModLOFFD13Q)$coefficients[5,] # FFD^2
+coefs_F <- summary(gradModLOFFD13Q)$coefficients[7,] # LeafOut x FFD
+
+lmTab_A <- rbind(coefs_A, coefs_B)
+lmTab_B <- rbind(lmTab_A, coefs_C)
+lmTab_C <- rbind(lmTab_B, coefs_D)
+lmTab_D <- rbind(lmTab_C, coefs_E)
+lmTab_E <- rbind(lmTab_D, coefs_F)
+
+lmCoefs_LOFFD13 <- lmTab_E
+rownames(lmCoefs_LOFFD13) <- c(
+"scLeafOutDOY",
+"scFFD",
+"scLnSize",
+"I(scLeafOutDOY^2) ",
+"I(scFFD^2)",
+"scLeafOutDOY:scFFD")
+  
+save(lmCoefs_LOFFD13, file = "Lv_lmCoefs_LOFFD13.RData")
+rm(list=ls(pattern="^coefs_"))
+rm(list=ls(pattern="^lmTab_"))
+```
+
+```{r}
+# double-check coefficients
+lmCoefs_LOFFD13
+summary(gradModLOFFD13L)$coefficients
+summary(gradModLOFFD13Q)$coefficients
+```
+
+
+### 4.1.2 Bootstrap confidence intervals for the model estimates  
+
+```{r Bootstrap LO & FFD 13, eval = FALSE}
+# confidence intervals for regression results 
+
+######################
+# Selection gradients
+#######################
+
+   ##############################
+   # Linear gradients
+
+
+      ##################
+      # Leaf-out
+
+# Leaf-out linear gradient
+# bootstrap for the slope
+slp <- function(gradModLOFFD13L) coef(gradModLOFFD13L)[2]
+b <- car::Boot(gradModLOFFD13L,slp, R=10000) # note the capital B
+b1 <- boot::boot.ci(b,type="bca")
+gradLeafOut13L_ci <- as.data.frame(b1$bca[1,4:5])
+rm(slp, b, b1)
+
+
+      ##################
+      # FFD
+
+#FFD linear gradient
+# bootstrap for the slope
+slp <- function(gradModLOFFD13L) coef(gradModLOFFD13L)[3]
+b <- car::Boot(gradModLOFFD13L,slp, R=10000) # note the capital B
+b1 <- boot::boot.ci(b,type="bca")
+gradFFD13L_ci <- as.data.frame(b1$bca[1,4:5])
+rm(slp, b, b1)
+
+
+
+      ##################
+      # Volume
+
+#Volume linear gradient
+# bootstrap for the slope
+slp <- function(gradModLOFFD13L) coef(gradModLOFFD13L)[4]
+b <- car::Boot(gradModLOFFD13L,slp, R=10000) # note the capital B
+b1 <- boot::boot.ci(b,type="bca")
+gradVol13L_ci <- as.data.frame(b1$bca[1,4:5])
+rm(slp, b, b1)
+
+   ##############################
+   # Quadratic gradients
+
+
+      ##################
+      # Leaf-out^2
+
+# Leaf-out quadratic gradient
+# bootstrap for the slope
+slp <- function(gradModLOFFD13Q) coef(gradModLOFFD13Q)[3]
+b <- car::Boot(gradModLOFFD13Q,slp, R=10000) # note the capital B
+b1 <- boot::boot.ci(b,type="bca")
+gradLeafOut13Q_ci <- as.data.frame(b1$bca[1,4:5])
+rm(slp, b, b1)
+
+      ##################
+      # FFD^2
+
+#FFD quadratic gradient
+# bootstrap for the slope
+slp <- function(gradModLOFFD13Q) coef(gradModLOFFD13Q)[5]
+b <- car::Boot(gradModLOFFD13Q,slp, R=10000) # note the capital B
+b1 <- boot::boot.ci(b,type="bca")
+gradFFD13Q_ci <- as.data.frame(b1$bca[1,4:5])
+rm(slp, b, b1)
+
+      ##################
+      # Leaf-out x FFD 
+
+# Interaction term
+# bootstrap for the slope
+slp <- function(gradModLOFFD13Q) coef(gradModLOFFD13Q)[7]
+b <- car::Boot(gradModLOFFD13Q,slp, R=10000) # note the capital B
+b1 <- boot::boot.ci(b,type="bca")
+gradINT13Q_ci <- as.data.frame(b1$bca[1,4:5])
+rm(slp, b, b1)
+
+############################
+# Save confidence intervals
+# as a table
+##########################
+
+lower_A <- rbind(gradLeafOut13L_ci[1,] ,gradFFD13L_ci[1,])
+lower_B <- rbind(lower_A ,gradVol13L_ci[1,])
+lower_C <- rbind(lower_B ,gradLeafOut13Q_ci[1,])
+lower_D <- rbind(lower_C ,gradFFD13Q_ci[1,])
+lower_E <- rbind(lower_D ,gradINT13Q_ci[1,])
+lower <- lower_E
+
+upper_A <- rbind(gradLeafOut13L_ci[2,] ,gradFFD13L_ci[2,])
+upper_B <- rbind(upper_A ,gradVol13L_ci[2,])
+upper_C <- rbind(upper_B ,gradLeafOut13Q_ci[2,])
+upper_D <- rbind(upper_C ,gradFFD13Q_ci[2,])
+upper_E <- rbind(upper_D ,gradINT13Q_ci[2,])
+upper <- upper_E
+
+
+BCIs_LOFFD13 <- cbind(lower, upper) 
+rownames(BCIs_LOFFD13) <- c(
+"scLeafOutDOY",
+"scFFD",
+"scLnSize",
+"I(scLeafOutDOY^2) ",
+"I(scFFD^2)",
+"sceafOutDOY:scFFD")
+  
+save(BCIs_LOFFD13, file = "Lv_BoostrapCIs_LOFFD13.RData")
+
+rm(list=ls(pattern="^lower"))
+rm(list=ls(pattern="^upper"))
+```
+
+
+### 4.1.3 Results, Leaf-out & First flowering day 13
+
+```{r}
+load("Lv_lmCoefs_LOFFD13.RData")
+load("Lv_BoostrapCIs_LOFFD13.RData")
+```
+
+```{r, include = TRUE}
+
+grads13_LOFFD13 <- cbind(lmCoefs_LOFFD13[,1:2], BCIs_LOFFD13)
+colnames(grads13_LOFFD13) <- c("Estimate", "SE", "Lower", "Upper")
+rownames(grads13_LOFFD13) <- c("Leaf-out", "FFD", 
+                             "Size", 
+                             "Leaf-out^2", "FFD^2", 
+                             "Leaf-out x FFD")
+
+pander::panderOptions('round', 3)
+pander::panderOptions('keep.trailing.zeros', TRUE)
+
+pander::pander(grads13_LOFFD13)
+```
+
+
+```{r, fig.height = 4, fig.width = 10, include = TRUE}
+plot(effects::allEffects(gradModLOFFD13L)[1:2])
+```
+
+
+
+# 6 Notes: BOOTSTRAP CI MODEL COEFFICIENTS
+
+BCa = "bias-corrected and accelerated (BCa) bootstrap interval"
+
+"Efron [1987] named the confidence interval based on this assumption the BCa interval, because it corrects for both bias and “acceleration” of the variance" 
+
+" it is difficult to produce nonparametric
+confidence intervals for statistics that are highly influenced by distribution tails"
+
+https://web.as.uky.edu/statistics/users/pbreheny/621/F12/notes/9-18.pdf (link is no longer valid)
+
