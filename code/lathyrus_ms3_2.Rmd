@@ -50,7 +50,7 @@ my_theme_legend <- function(){
 myPalette <- colorRampPalette(brewer.pal(11, "YlOrRd"))
 ```
 
-```{r function to check for overdispersion include=FALSE}
+```{r function to check for overdispersion, include=FALSE}
 overdisp_fun <- function(model) {
     rdf <- df.residual(model)
     rp <- residuals(model,type="pearson")
@@ -60,6 +60,51 @@ overdisp_fun <- function(model) {
     c(chisq=Pearson.chisq,ratio=prat,rdf=rdf,p=pval)
 }
 ```
+
+```{r function summarySE, include=FALSE}
+## Gives count, mean, standard deviation, standard error of the mean, and confidence interval (default 95%).
+##   data: a data frame.
+##   measurevar: the name of a column that contains the variable to be summariezed
+##   groupvars: a vector containing names of columns that contain grouping variables
+##   na.rm: a boolean that indicates whether to ignore NA's
+##   conf.interval: the percent range of the confidence interval (default is 95%)
+summarySE <- function(data=NULL, measurevar, groupvars=NULL, na.rm=FALSE,
+                      conf.interval=.95, .drop=TRUE) {
+  library(plyr)
+  
+  # New version of length which can handle NA's: if na.rm==T, don't count them
+  length2 <- function (x, na.rm=FALSE) {
+    if (na.rm) sum(!is.na(x))
+    else       length(x)
+  }
+  
+  # This does the summary. For each group's data frame, return a vector with
+  # N, mean, and sd
+  datac <- ddply(data, groupvars, .drop=.drop,
+                 .fun = function(xx, col) {
+                   c(N    = length2(xx[[col]], na.rm=na.rm),
+                     mean = mean   (xx[[col]], na.rm=na.rm),
+                     sd   = sd     (xx[[col]], na.rm=na.rm)
+                   )
+                 },
+                 measurevar
+  )
+  
+  # Rename the "mean" column    
+  datac <- rename(datac, c("mean" = measurevar))
+  
+  datac$se <- datac$sd / sqrt(datac$N)  # Calculate standard error of the mean
+  
+  # Confidence interval multiplier for standard error
+  # Calculate t-statistic for confidence interval: 
+  # e.g., if conf.interval is .95, use .975 (above/below), and use df=N-1
+  ciMult <- qt(conf.interval/2 + .5, datac$N-1)
+  datac$ci <- datac$se * ciMult
+  
+  return(datac)
+}
+```
+
 
 # Data preparation
 
@@ -667,36 +712,9 @@ globmod_pred_GLM1_B_ns<-glmmTMB(cbind(round(n_pred_seeds),round(n_intact_seeds))
 ```
 
 ```{r echo=FALSE, fig.height=4, fig.width=12, message=FALSE, warning=FALSE}
-# Fig. 1: Mean and SD of FFD
-fig1<-grid.arrange(
-  # N seeds per fl <- SD FFD
-ggpredict(globmod_seedsperfl_B_ns,terms = "FFD_sd [all]")%>%
-  ggplot(aes(x,predicted))+geom_ribbon(aes(ymin=conf.low,ymax=conf.high),fill="grey")+
-  geom_line(color="black",size=1)+ggtitle("A)")+
-  my_theme()+xlab("Yearly standard deviation of FFD")+ylab("Predicted number of\nseeds per flower")+
-  theme(plot.title=element_text(hjust=-0.15,vjust=1)),
-# Predation <- Mean FFD
-ggpredict(globmod_pred_GLM1_B_ns,terms = "FFD_mean [all]")%>%
-  ggplot(aes(x,predicted))+geom_ribbon(aes(ymin=conf.low,ymax=conf.high),fill="grey")+
-  geom_line(color="black",size=1)+ggtitle("B)")+
-  my_theme()+xlab("Yearly mean of FFD")+ylab("Predicted seed predation")+
-  theme(plot.title=element_text(hjust=-0.15,vjust=1)),
-# Predation <- SD FFD
-ggpredict(globmod_pred_GLM1_B_ns,terms = "FFD_sd [all]")%>%
-  ggplot(aes(x,predicted))+geom_ribbon(aes(ymin=conf.low,ymax=conf.high),fill="grey")+
-  geom_line(color="black",size=1)+ggtitle("C)")+
-  my_theme()+xlab("Yearly standard deviation of FFD")+ylab("Predicted seed predation")+
-  theme(plot.title=element_text(hjust=-0.15,vjust=1)),
-ncol=3)
-ggsave(filename=
-          "C:/Users/User/Dropbox/SU/Projects/lathyrus/lathyrus_ms3/results/figures/Figure_1.tiff",
-        plot=fig1,device="tiff",width=30,height=9,units="cm",dpi=300,compression="lzw")
-```
+# Fig. 1: Temperatures
 
-```{r echo=FALSE, fig.height=4, fig.width=12, message=FALSE, warning=FALSE}
-# Fig. 2: Temperatures
-
-fig2a<-grid.arrange(
+fig1a<-grid.arrange(
   # Grazing <- Temperature March
 ggpredict(globmod_grazing1_A_ns,terms = "mean_3 [all]")%>%
   ggplot(aes(x,predicted))+geom_ribbon(aes(ymin=conf.low,ymax=conf.high),fill="grey")+
@@ -720,7 +738,7 @@ ggpredict(globmod_grazing1_A_ns,terms = "mean_5 [all]")%>%
   labs(subtitle = "May")+theme(plot.subtitle = element_text(hjust = 0.5,margin=margin(t=10,b=-20))),
 ncol=3)
 
-fig2b<-grid.arrange(
+fig1b<-grid.arrange(
 # N seeds per fl <- Temperature May
 ggpredict(globmod_seedsperfl_A_ns,terms = "mean_5 [all]")%>%
   ggplot(aes(x,predicted))+geom_ribbon(aes(ymin=conf.low,ymax=conf.high),fill="grey")+
@@ -734,7 +752,7 @@ ggplot() + theme_void(),
 ggplot() + theme_void(),
 ncol=3)
 
-fig2c<-grid.arrange(
+fig1c<-grid.arrange(
 # Predation <- Temperature March
 ggpredict(globmod_pred_GLM1_A_ns,terms = "mean_3 [all]")%>%
   ggplot(aes(x,predicted))+geom_ribbon(aes(ymin=conf.low,ymax=conf.high),fill="grey")+
@@ -758,15 +776,42 @@ ggpredict(globmod_pred_GLM1_A_ns,terms = "mean_6 [all]")%>%
   labs(subtitle = "June")+theme(plot.subtitle = element_text(hjust = 0.5,margin=margin(t=10,b=-20))),
 ncol=3)
 
-fig2<-grid.arrange(fig2a,fig2b,fig2c,
+fig1<-grid.arrange(fig1a,fig1b,fig1c,
                    nrow=3,
                    bottom=textGrob("Temperature (ºC)",gp=gpar(fontsize=20,fontfamily="serif")),
                    left=textGrob("Predicted interaction intensity",just="center",hjust=0.48,
                                  gp=gpar(fontsize=20,fontfamily="serif"),rot=90))
-plot(fig2)
+plot(fig1)
+ggsave(filename=
+          "C:/Users/User/Dropbox/SU/Projects/lathyrus/lathyrus_ms3/results/figures/Figure_1.tiff",
+        plot=fig1,device="tiff",width=30,height=27,units="cm",dpi=300,compression="lzw")
+```
+
+```{r echo=FALSE, fig.height=4, fig.width=12, message=FALSE, warning=FALSE}
+# Fig. 2: Mean and SD of FFD
+fig2<-grid.arrange(
+  # N seeds per fl <- SD FFD
+ggpredict(globmod_seedsperfl_B_ns,terms = "FFD_sd [all]")%>%
+  ggplot(aes(x,predicted))+geom_ribbon(aes(ymin=conf.low,ymax=conf.high),fill="grey")+
+  geom_line(color="black",size=1)+ggtitle("A)")+
+  my_theme()+xlab("Standard deviation of FFD")+ylab("Predicted number of\nseeds per flower")+
+  theme(plot.title=element_text(hjust=-0.15,vjust=1)),
+# Predation <- Mean FFD
+ggpredict(globmod_pred_GLM1_B_ns,terms = "FFD_mean [all]")%>%
+  ggplot(aes(x,predicted))+geom_ribbon(aes(ymin=conf.low,ymax=conf.high),fill="grey")+
+  geom_line(color="black",size=1)+ggtitle("B)")+
+  my_theme()+xlab("Mean FFD")+ylab("Predicted seed predation")+
+  theme(plot.title=element_text(hjust=-0.15,vjust=1)),
+# Predation <- SD FFD
+ggpredict(globmod_pred_GLM1_B_ns,terms = "FFD_sd [all]")%>%
+  ggplot(aes(x,predicted))+geom_ribbon(aes(ymin=conf.low,ymax=conf.high),fill="grey")+
+  geom_line(color="black",size=1)+ggtitle("C)")+
+  my_theme()+xlab("Standard deviation of FFD")+ylab("Predicted seed predation")+
+  theme(plot.title=element_text(hjust=-0.15,vjust=1)),
+ncol=3)
 ggsave(filename=
           "C:/Users/User/Dropbox/SU/Projects/lathyrus/lathyrus_ms3/results/figures/Figure_2.tiff",
-        plot=fig2,device="tiff",width=30,height=27,units="cm",dpi=300,compression="lzw")
+        plot=fig2,device="tiff",width=30,height=9,units="cm",dpi=300,compression="lzw")
 ```
 
 ```{r echo=FALSE, fig.height=4, fig.width=12, message=FALSE, warning=FALSE}
@@ -794,7 +839,7 @@ ggpredict(globmod_pred_GLM1_A_ns,terms = c("FFD_s_y [all]","mean_4 [all]"))%>%
         legend.direction="horizontal")+labs(colour="April temperature")+
    guides(colour = guide_colourbar(title.position="top",title.hjust = 7,barheight=0.7))+
   theme(legend.background = element_rect(fill=alpha('blue', 0))),
-ncol=3,bottom=textGrob("First flowering date (standardized within years)",just="center",hjust=0.45,
+ncol=3,bottom=textGrob("First flowering date",just="center",hjust=0.45,
                        gp=gpar(fontsize=16,fontfamily="serif")))
 ggsave(filename=
           "C:/Users/User/Dropbox/SU/Projects/lathyrus/lathyrus_ms3/results/figures/Figure_3.tiff",
@@ -1002,12 +1047,12 @@ mod_int_sel_GLMM_nsints<-glmmTMB(n_intact_seeds_rel_y ~ FFD_s_y+n_fl_s_y+
                FFD_s_y:n_seeds_per_fl_res_mean+FFD_s_y:grazing_mean+FFD_s_y:prop_pred_seeds_mean+
                  (1|id),data_selag,family="gaussian")
 
-ggpredict(mod_int_sel_GLMM_nsints,terms = c("FFD_s_y [all]","grazing_mean [quart]"))%>%
+ggpredict(mod_int_sel_GLMM_nsints,terms = c("FFD_s_y [all]","grazing_mean [0:0.8 by=.1]"))%>%
   ggplot(aes(x,predicted,colour=group,fill=group))+
-  geom_line(aes(color=group),size=1)+my_theme()+
+  geom_line(aes(color=as.numeric(as.character(group))),size=0.6)+my_theme()+
+  scale_colour_gradientn(colours = myPalette(100)) +
   theme(legend.position="right")+labs(colour="Grazing")+
-  scale_color_manual(values=c("#d7191c","#fdae61","#ffffbf","#abdda4","#2b83ba"))+
-  xlab("FFD (standardized within years)")+ylab("Predicted number of intact seeds")
+  xlab("First flowering date")+ylab("Predicted number of intact seeds")
 ggsave(filename=
           "C:/Users/User/Dropbox/SU/Projects/lathyrus/lathyrus_ms3/results/figures/Figure_4.tiff",
         device="tiff",width=12,height=9,units="cm",dpi=300,compression="lzw")
@@ -1118,8 +1163,6 @@ Simulate residuals of the model:
 ```{r}
 # simulationOutput_model_fitness_pres <- 
 #     simulateResiduals(fittedModel = model_fitness_pres, n = 5000) # Error
-simulationOutput_model_seeds_pres <- 
-    simulateResiduals(fittedModel = model_seeds_pres, n = 5000) 
 simulationOutput_model_fitness_count <- 
    simulateResiduals(fittedModel = model_fitness_count, n = 5000) 
 ```
@@ -1127,9 +1170,7 @@ simulationOutput_model_fitness_count <-
 qq-plot  and plot of residuals vs. predicted:
 
 ```{r}
-plot(simulationOutput_model_seeds_pres)
 plot(simulationOutput_model_fitness_count)
-testResiduals(simulationOutput_model_seeds_pres)
 testResiduals(simulationOutput_model_fitness_count)
 ```
 
@@ -1169,7 +1210,7 @@ ggplot(data_selag_subset4,aes(x=prop_pred_seeds,y=n_intact_seeds))+geom_point()+
 
 # Different grazing estimates
 
-```{r}
+```{r message=FALSE, warning=FALSE}
 data_selag$grazing_type<-with(data_selag,ifelse(year<1997|year>2015,"flowers",
                                                 ifelse(year==2006,"shoots","volume")))
 summary(lm(n_seeds_per_fl~grazing_corr*grazing_type,data_selag))
