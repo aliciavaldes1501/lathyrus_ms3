@@ -1139,15 +1139,17 @@ data_selag_subset4$n_intact_seeds_pres<-with(data_selag_subset4,
                                                     ifelse(n_intact_seeds>0,1,0)))
 
 model_fitness_pres<-glmmTMB(n_intact_seeds_pres~scale(grazing_corr)+scale(n_seeds_per_fl)+
-                              scale(n_fl)+FFD_s_y+(1|id),data_selag_subset4,family="binomial") 
-# Very small variance of id if including it as a random effect --> but include it still
+                              scale(n_fl)+FFD_s_y+(1|year)+ 
+                              # Added random effect of year as suggested by Elsa
+                              (1|id),data_selag_subset4,family="binomial") # Very small variance of id if including it as a random effect --> but include it still
 # Coefs were very similar to those in GLM
 
-model_fitness_count<-glmmTMB(round(n_intact_seeds)~
-                               scale(n_seeds_per_fl)+scale(grazing_corr)+
-                               scale(prop_pred_seeds)+scale(n_fl)+FFD_s_y,
+model_fitness_count<-glmmTMB(round(n_intact_seeds)~scale(n_seeds_per_fl)+
+                               scale(grazing_corr)+scale(prop_pred_seeds)+scale(n_fl)+
+                               FFD_s_y+(1|year),
+                             # Added random effect of year as suggested by Elsa
                              subset(data_selag_subset4,n_seeds>0),family="nbinom2")
-# GLM because most ids with only one observation
+# Not adding id as random effects because most ids with only one observation
 
 nobs(model_fitness_pres) # All plants
 nobs(model_fitness_count) # Plants with > 0 seeds
