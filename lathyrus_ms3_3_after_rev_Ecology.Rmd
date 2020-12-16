@@ -17,13 +17,11 @@ knitr::opts_chunk$set(warning = FALSE, message = FALSE)
 library(tidyverse)
 library(ggthemes)
 library(MuMIn)
-library(plyr)
 library(knitr)
 library(gridExtra)
 library(lme4)
 library(parallel)
 library(lmerTest)
-library(RPushbullet)
 library(effects)
 library(broom)
 library(car)
@@ -121,14 +119,14 @@ data_selag$n_fl<-data_selag$cum_n_fl
 data_selag$cum_n_fl<-NULL
 mean_weather<-mean_weather[c(1,115:118)]
 data_selag<-merge(data_selag,mean_weather,by="year")%>%
-  arrange(.,id)
-
-data_selag<-anti_join(data_selag,subset(data_selag,is.na(FFD)&is.na(grazing)&
-                                          is.na(shoot_vol)&is.na(n_fr)&is.na(n_ovules)&
-                                          is.na(n_seeds)&is.na(n_intact_seeds)&
-                                          is.na(n_fl))) # Remove rows with all these NAs
-data_selag<-subset(data_selag,year!=1995) # Remove data from 1995 because of problems with predation
+  arrange(id)%>%
+  anti_join(subset(data_selag,is.na(FFD)&is.na(grazing)&
+                     is.na(shoot_vol)&is.na(n_fr)&is.na(n_ovules)&
+                     is.na(n_seeds)&is.na(n_intact_seeds)&
+                     is.na(n_fl)))%>% # Remove rows with all these NAs
+  filter(year!=1995) # Remove data from 1995 because of problems with predation
 names(data_selag)
+head(data_selag)
 ```
 
 List of variables in data set:
@@ -152,19 +150,14 @@ List of variables in data set:
 
 Interactions that we will focus on:
 
-- Pollination: number of seeds per flower
 - Seed predation: proportion of seeds escaping predation
 - Grazing (by deer) before flowering: proportion of grazing
 
-Calculate fruit set, seed set, number of seeds per fruit, number of seeds per flower, proportion of predated seeds
+Calculate proportion of predated seeds
 
 ```{r calc interactions}
 data_selag<-data_selag%>%
-  mutate(fruit_set=n_fr/n_fl,seed_set=ifelse(fruit_set==0,0,n_seeds/n_ovules),
-         n_seeds_per_fr=ifelse(fruit_set==0,0,n_seeds/n_fr),
-         n_seeds_per_fl=n_seeds/n_fl,
-         prop_seeds_esc=ifelse(n_seeds==0,NA,1-((n_seeds-n_intact_seeds)/n_seeds)),
-         prop_pred_seeds=ifelse(n_seeds==0,NA,(n_seeds-n_intact_seeds)/n_seeds),
+  mutate(prop_pred_seeds=ifelse(n_seeds==0,NA,(n_seeds-n_intact_seeds)/n_seeds),
          n_pred_seeds=n_seeds-n_intact_seeds)
 ```
 
@@ -181,129 +174,539 @@ data_selag<-left_join(data_selag,grazing_new)%>%
   mutate(grazing_corr=ifelse(is.na(grazing_new),grazing,grazing_new))
 ```
 
-Calculate successes/failures for grazing
+Calculate successes/failures for grazing (and weights)
 
 ```{r}
-data_selag$grazing_success<-round(with(data_selag,ifelse(is.na(grazing_corr),NA,
-                                                   ifelse(year<1997|year>2015,grazing_corr*n_fl,
-                                                   ifelse(year>2006&year<2016,grazing_corr*shoot_vol,
-                                                          999)))))
-data_selag$grazing_failure<-round(with(data_selag,ifelse(is.na(grazing_corr),NA,
-                                                   ifelse(year<1997|year>2015,n_fl-grazing_success,
-                                                          ifelse(year>2006&year<2016,
-                                                                 shoot_vol-grazing_success,
+data_selag$grazing_success<-round(with(data_selag,
+                                       ifelse(is.na(grazing_corr),NA,
+                                              ifelse(year<1997|year>2015,
+                                                     grazing_corr*n_fl,
+                                                     ifelse(year>2006&year<2016,
+                                                            grazing_corr*shoot_vol,
+                                                            999)))))
+data_selag$grazing_failure<-round(with(data_selag,
+                                       ifelse(is.na(grazing_corr),NA,
+                                              ifelse(year<1997|year>2015,
+                                                     n_fl-grazing_success,
+                                                     ifelse(year>2006&year<2016,
+                                                            shoot_vol-grazing_success,
                                                                  999)))))
-grazing_success_2006<-read.table(
-  "data/grazing_success_2006.csv",
-  header=T,sep=",",dec=".")
+data_selag$grazing_weights<-round(with(data_selag,
+                                       ifelse(is.na(grazing_corr),NA,
+                                              ifelse(year<1997|year>2015,
+                                                     n_fl,
+                                                     ifelse(year>2006&year<2016,
+                                                            shoot_vol,
+                                                            999)))))
+
+grazing_success_2006<-read.table("data/grazing_success_2006.csv",
+                                 header=T,sep=",",dec=".")
+grazing_success_2006<-grazing_success_2006%>%
+  mutate(weights=gr_success+gr_failure)
 data_selag<-data_selag%>%
   left_join(grazing_success_2006)
-data_selag$grazing_success<-with(data_selag,ifelse(year==2006,gr_success,grazing_success))
-data_selag$grazing_failure<-with(data_selag,ifelse(year==2006,gr_failure,grazing_failure))
+data_selag$grazing_success<-with(data_selag,
+                                 ifelse(year==2006,gr_success,grazing_success))
+data_selag$grazing_failure<-with(data_selag,
+                                 ifelse(year==2006,gr_failure,grazing_failure))
+data_selag$grazing_weights<-with(data_selag,
+                                 ifelse(year==2006,weights,grazing_weights))
 data_selag$gr_success<-NULL
 data_selag$gr_failure<-NULL
+data_selag$weights<-NULL
+head(data_selag)
 ```
 
-# 1. Raw relationships interactions ~ FFD in different years
+# Appendix S5: Raw relationships interactions ~ FFD in different years
+
+# NOTE: Revise naming of appendices!
 
 ## Grazing
 
-```{r echo=FALSE, fig.height=20, fig.width=10, message=FALSE, warning=FALSE}
-ggplot(data_selag,aes(x=FFD,y=grazing_success/(grazing_success+grazing_failure),
-                      succ=grazing_success, fail=grazing_failure))+my_theme()+
-  geom_point(size=1,alpha=0.1)+
-  geom_smooth(method="glm",method.args=list(family="binomial"),
-              formula=cbind(succ,fail)~x,se=T,color="black",size=0.5)+
-  facet_wrap(~year,nrow=7)+ylab("Grazing")+xlab("FFD")
- ggsave(filename=
-          "output/figures/grazing1.tiff",
-        device="tiff",width=12,height=23,units="cm",dpi=300,compression="lzw")
-```
-
 ```{r echo=FALSE, fig.height=10, fig.width=8, message=FALSE, warning=FALSE}
-ggplot(subset(data_selag,year<2009),aes(x=FFD,y=grazing_success/(grazing_success+grazing_failure),
+ggplot(subset(data_selag,year<2009),
+       aes(x=FFD,y=grazing_success/(grazing_success+grazing_failure),
                       succ=grazing_success, fail=grazing_failure))+my_theme()+
   geom_point(size=1,alpha=0.1)+
   geom_smooth(method="glm",method.args=list(family="binomial"),
               formula=cbind(succ,fail)~x,se=T,color="black",size=0.5)+
   facet_wrap(~year,ncol=3,scales="free")+ylab("Grazing")+xlab("FFD")
-ggsave(filename=
-          "output/figures/AppendixS3_1A.tiff",
-        device="tiff",width=168,height=210,units="mm",dpi=300,compression="lzw")
-ggplot(subset(data_selag,year>2008),aes(x=FFD,y=grazing_success/(grazing_success+grazing_failure),
+ggsave(filename="output/figures/AppendixS5_1A.tiff",device="tiff",width=168,
+       height=210,units="mm",dpi=300,compression="lzw")
+ggplot(subset(data_selag,year>2008),
+       aes(x=FFD,y=grazing_success/(grazing_success+grazing_failure),
                       succ=grazing_success, fail=grazing_failure))+my_theme()+
   geom_point(size=1,alpha=0.1)+
   geom_smooth(method="glm",method.args=list(family="binomial"),
               formula=cbind(succ,fail)~x,se=T,color="black",size=0.5)+
   facet_wrap(~year,ncol=3,scales="free")+ylab("Grazing")+xlab("FFD")
-ggsave(filename=
-          "output/figures/AppendixS3_1B.tiff",
-        device="tiff",width=168,height=158,units="mm",dpi=300,compression="lzw")
-```
-
-## Number of seeds per flower
-
-```{r echo=FALSE, fig.height=20, fig.width=10, message=FALSE, warning=FALSE}
-ggplot(data_selag,aes(x=FFD,y=n_seeds_per_fl))+my_theme()+
-  geom_point(size=1,alpha=0.1)+
-  geom_smooth(method="glm",method.args=list(family="poisson"),se=T,color="black",size=0.5)+
-  facet_wrap(~year,nrow=7)+ylab("Number of seeds per flower")+xlab("FFD")
-ggsave(filename=
-          "output/figures/seedfl1.tiff",
-        device="tiff",width=12,height=23,units="cm",dpi=300,compression="lzw")
-```
-
-```{r echo=FALSE, fig.height=10, fig.width=8, message=FALSE, warning=FALSE}
-ggplot(subset(data_selag,year<2009),aes(x=FFD,y=n_seeds_per_fl))+my_theme()+
-  geom_point(size=1,alpha=0.1)+
-  geom_smooth(method="glm",method.args=list(family="poisson"),se=T,color="black",size=0.5)+
-  facet_wrap(~year,ncol=3,scales="free")+ylab("Number of seeds per flower")+xlab("FFD")
-ggsave(filename=
-          "output/figures/AppendixS3_2A.tiff",
-        device="tiff",width=168,height=210,units="mm",dpi=300,compression="lzw")
-ggplot(subset(data_selag,year>2008),aes(x=FFD,y=n_seeds_per_fl))+my_theme()+
-  geom_point(size=1,alpha=0.1)+
-  geom_smooth(method="glm",method.args=list(family="poisson"),se=T,color="black",size=0.5)+
-  facet_wrap(~year,ncol=3,scales="free")+ylab("Number of seeds per flower")+xlab("FFD")
-ggsave(filename=
-          "output/figures/AppendixS3_2B.tiff",
-        device="tiff",width=168,height=158,units="mm",dpi=300,compression="lzw")
+ggsave(filename="output/figures/AppendixS5_1B.tiff",device="tiff",width=168,
+       height=158,units="mm",dpi=300,compression="lzw")
 ```
 
 ## Predation
 
-```{r echo=FALSE, fig.height=20, fig.width=10, message=FALSE, warning=FALSE}
-ggplot(data_selag,aes(x=FFD,y=n_pred_seeds/(n_pred_seeds+n_intact_seeds),
+```{r echo=FALSE, fig.height=10, fig.width=8, message=FALSE, warning=FALSE}
+ggplot(subset(data_selag,year<2009),
+       aes(x=FFD,y=n_pred_seeds/(n_pred_seeds+n_intact_seeds),
                       succ=n_pred_seeds, fail=n_intact_seeds))+my_theme()+
   geom_point(size=1,alpha=0.1)+
   geom_smooth(method="glm",method.args=list(family="binomial"),
               formula=cbind(succ,fail)~x,se=T,color="black",size=0.5)+
-  facet_wrap(~year,nrow=7)+ylab("Seed predation")+xlab("FFD")
-ggsave(filename=
-          "output/figures/pred1.tiff",
-        device="tiff",width=12,height=23,units="cm",dpi=300,compression="lzw")
+  facet_wrap(~year,ncol=3,scales="free")+ylab("Seed predation")+xlab("FFD")
+ggsave(filename="output/figures/AppendixS5_2A.tiff",device="tiff",width=168,
+       height=210,units="mm",dpi=300,compression="lzw")
+ggplot(subset(data_selag,year>2008),
+       aes(x=FFD,y=n_pred_seeds/(n_pred_seeds+n_intact_seeds),
+                      succ=n_pred_seeds, fail=n_intact_seeds))+my_theme()+
+  geom_point(size=1,alpha=0.1)+
+  geom_smooth(method="glm",method.args=list(family="binomial"),
+              formula=cbind(succ,fail)~x,se=T,color="black",size=0.5)+
+  facet_wrap(~year,ncol=3,scales="free")+ylab("Seed predation")+xlab("FFD")
+ggsave(filename="output/figures/AppendixS5_2B.tiff",device="tiff",width=168,
+       height=158,units="mm",dpi=300,compression="lzw")
 ```
 
-```{r echo=FALSE, fig.height=10, fig.width=8, message=FALSE, warning=FALSE}
-ggplot(subset(data_selag,year<2009),aes(x=FFD,y=n_pred_seeds/(n_pred_seeds+n_intact_seeds),
-                      succ=n_pred_seeds, fail=n_intact_seeds))+my_theme()+
-  geom_point(size=1,alpha=0.1)+
-  geom_smooth(method="glm",method.args=list(family="binomial"),
-              formula=cbind(succ,fail)~x,se=T,color="black",size=0.5)+
-  facet_wrap(~year,ncol=3,scales="free")+ylab("Seed predation")+xlab("FFD")
-ggsave(filename=
-          "output/figures/AppendixS3_3A.tiff",
-        device="tiff",width=168,height=210,units="mm",dpi=300,compression="lzw")
-ggplot(subset(data_selag,year>2008),aes(x=FFD,y=n_pred_seeds/(n_pred_seeds+n_intact_seeds),
-                      succ=n_pred_seeds, fail=n_intact_seeds))+my_theme()+
-  geom_point(size=1,alpha=0.1)+
-  geom_smooth(method="glm",method.args=list(family="binomial"),
-              formula=cbind(succ,fail)~x,se=T,color="black",size=0.5)+
-  facet_wrap(~year,ncol=3,scales="free")+ylab("Seed predation")+xlab("FFD")
-ggsave(filename=
-          "output/figures/AppendixS3_3B.tiff",
-        device="tiff",width=168,height=158,units="mm",dpi=300,compression="lzw")
+# Path model H1 and H2
+
+H1: Flowering phenology of individuals influences the intensities of interactions with seed predators and grazers.
+
+H2: These biotic interactions have important effects on fitness, and alter selection on flowering time within years. 
+
+Models include the effects of FFD and n_fl standardized within years (FFD_s_y and n_fl_s_y), grazing and seed predation on fitness relativized within years (fitness_rel_y), as well as the effects of FFD_s_y and n_fl_s_y on grazing and seed predation.  
+
+Calculate FFD_s_y, n_fl_s_y and fitness_rel_y:
+
+```{r}
+data_selag<-data_selag%>% 
+  group_by(year) %>% 
+  mutate(FFD_mean=mean(FFD,na.rm=T),
+         FFD_sd=sd(FFD,na.rm=T),
+         FFD_s_y=(FFD-FFD_mean)/FFD_sd,
+         n_fl_mean=mean(n_fl,na.rm=T),
+         n_fl_sd=sd(n_fl,na.rm=T),
+         n_fl_s_y=(n_fl-n_fl_mean)/n_fl_sd,
+         fitness_mean=mean(n_intact_seeds,na.rm=T),
+         fitness_rel_y=n_intact_seeds/fitness_mean)
 ```
+
+```{r}
+data_selag$seeds_01<-with(data_selag,ifelse(is.na(n_seeds),NA,
+                                              ifelse(n_seeds>0,1,0)))
+```
+
+
+```{r message=FALSE, warning=FALSE}
+path1_mod1<-glmer(seeds_01~FFD_s_y+n_fl_s_y+grazing_corr+(1|id),
+                data=data_selag,family="binomial")
+path1_mod2<-lmer(fitness_rel_y~FFD_s_y+n_fl_s_y+grazing_corr+prop_pred_seeds+(1|id),
+               data=data_selag)
+path1_mod3<-glmer(grazing_corr~FFD_s_y+n_fl_s_y+(1|id),
+                  data=data_selag,family="binomial",weights=grazing_weights)
+path1_mod4<-glmer(prop_pred_seeds~FFD_s_y+n_fl_s_y+(1|id),
+                  data=data_selag,family="binomial",
+                  weights=n_seeds)
+```
+
+```{r}
+nobs(path1_mod1)
+nobs(path1_mod2)
+nobs(path1_mod3)
+nobs(path1_mod4)
+```
+```{r message=FALSE, warning=FALSE}
+path1<-psem(path1_mod1,path1_mod2,path1_mod3,path1_mod4)
+coefs(path1) 
+plot(path1,show="unstd") 
+```
+
+piecewiseSEM does not give standardized effects for binomial GLMMs --> we could take the missing standardized effects from models without the random effects.
+
+```{r message=FALSE, warning=FALSE}
+path1_mod3_glmmTMB<-glmmTMB(grazing_corr~FFD_s_y+n_fl_s_y+(1|id),
+                            data=data_selag,family="binomial",
+                            weights=grazing_weights)
+path1_mod4_glmmTMB<-glmmTMB(prop_pred_seeds~FFD_s_y+n_fl_s_y+(1|id),
+                            data=data_selag,family="binomial",
+                            weights=round(n_seeds))
+# Using glmmTMB cause using glmer gave error in DHARMa, results are similar
+# Also needs round() to avoid errors in DHARMa
+```
+
+Model diagnostics with DHARMa
+ 
+```{r message=FALSE, warning=FALSE}
+sim_path1_mod1 <- simulateResiduals(fittedModel = path1_mod1, n = 5000) 
+sim_path1_mod2 <- simulateResiduals(fittedModel = path1_mod2, n = 5000) 
+sim_path1_mod3 <- simulateResiduals(fittedModel = path1_mod3_glmmTMB, n = 5000) 
+sim_path1_mod4 <- simulateResiduals(fittedModel = path1_mod4_glmmTMB, n = 5000) 
+```
+
+qq-plot  and plot of residuals vs. predicted:
+
+```{r}
+plot(sim_path1_mod1,quantreg=T) # model OK
+plot(sim_path1_mod2,quantreg=T) # not OK - calculate BCA intervals
+plot(sim_path1_mod3,quantreg=T) # not OK 
+plot(sim_path1_mod4,quantreg=T) # not OK
+```
+
+```{r}
+testDispersion(sim_path1_mod3) # underdispersed
+testDispersion(sim_path1_mod4) # overdispersed
+```
+
+Refit models 3 and 4 with betabinomial distribution.
+
+```{r message=FALSE, warning=FALSE}
+path1_mod3_bb<-glmmTMB(grazing_corr~FFD_s_y+n_fl_s_y+(1|id),
+                            data=data_selag,family="betabinomial",
+                            weights=grazing_weights)
+path1_mod4_bb<-glmmTMB(prop_pred_seeds~FFD_s_y+n_fl_s_y+(1|id),
+                            data=data_selag,family="betabinomial",
+                            weights=round(n_seeds))
+```
+
+Model diagnostics with DHARMa
+ 
+```{r message=FALSE, warning=FALSE}
+sim_path1_mod3_bb <- simulateResiduals(fittedModel = path1_mod3_bb, n = 5000) 
+sim_path1_mod4_bb <- simulateResiduals(fittedModel = path1_mod4_bb, n = 5000) 
+```
+
+qq-plot  and plot of residuals vs. predicted:
+
+```{r}
+plot(sim_path1_mod3_bb,quantreg=T) # not OK 
+plot(sim_path1_mod4_bb,quantreg=T) # not OK
+```
+
+KS test being significant is probably not a problem.
+
+From https://github.com/florianhartig/DHARMa/issues/181
+
+"the p-value shows you that there is a significant deviation from the assumed distribution, but significance != effect size. In other words, if you have a large number of data points (as you have here), even the slightest deviation will become significant. [...] the qq-plot is nearly linear, suggesting that the overall distribution is roughly OK.
+
+```{r}
+testDispersion(sim_path1_mod3_bb) # still a bit of underdispersion probably OK
+testDispersion(sim_path1_mod4_bb) # no overdispersion
+```
+
+Plot residuals against the predictors in the model
+
+```{r}
+par(mfrow=c(2,2))
+plotResiduals(sim_path1_mod3_bb,
+              subset(data_selag,!is.na(FFD_s_y)&!is.na(n_fl_s_y)&
+                       !is.na(grazing_corr)&!is.na(grazing_weights))$FFD_s_y,
+              main="Residuals vs FFD_s_y",quantreg = T)
+plotResiduals(sim_path1_mod3_bb,
+              subset(data_selag,!is.na(FFD_s_y)&!is.na(n_fl_s_y)&
+                       !is.na(grazing_corr)&!is.na(grazing_weights))$n_fl_s_y,
+              main="Residuals vs n_fl_s_y",quantreg = T)
+plotResiduals(sim_path1_mod4_bb,
+              subset(data_selag,!is.na(FFD_s_y)&!is.na(n_fl_s_y)&
+                       !is.na(prop_pred_seeds)&!is.na(n_seeds))$FFD_s_y,
+              main="Residuals vs FFD_s_y",quantreg = T)
+plotResiduals(sim_path1_mod4_bb,
+              subset(data_selag,!is.na(FFD_s_y)&!is.na(n_fl_s_y)&
+                       !is.na(prop_pred_seeds)&!is.na(n_seeds))$n_fl_s_y,
+              main="Residuals vs n_fl_s_y",quantreg = T)
+```
+
+They look OK (but keep an eye on FFD_s_y for mod4).
+
+Tested quadratic effects of FFD on grazing and seed predation, and they were not significant in betabinomial models. 
+
+Boostrapped confidence intervals for model 2:
+
+```{r}
+b_par<-bootMer(x=path1_mod2,FUN=fixef,nsim=10000)
+```
+
+
+```{r}
+confint(b_par,level=0.95, method="boot") # Percentile method
+```
+
+Similar to significances in the lmer model.
+
+For linear model without the random effect:
+
+```{r}
+path1_mod2_lm<-lm(fitness_rel_y~FFD_s_y+n_fl_s_y+grazing_corr+prop_pred_seeds,
+               data=subset(data_selag,
+                           !is.na(fitness_rel_y)&!is.na(FFD_s_y)&
+                             !is.na(n_fl_s_y)&!is.na(grazing_corr)&
+                             !is.na(prop_pred_seeds)))
+```
+
+
+```{r}
+# FFD_s_y
+slp <- function(path1_mod2_lm) coef(path1_mod2_lm)[2]
+b <- car::Boot(path1_mod2_lm,slp, R=10000) # note the capital B
+b1 <- boot::boot.ci(b,type="bca")
+FFD_s_y_ci <- as.data.frame(b1$bca[1,4:5])
+rm(slp, b, b1)
+```
+
+```{r}
+# n_fl_s_y
+slp <- function(path1_mod2_lm) coef(path1_mod2_lm)[3]
+b <- car::Boot(path1_mod2_lm,slp, R=10000) # note the capital B
+b1 <- boot::boot.ci(b,type="bca")
+n_fl_s_y_ci <- as.data.frame(b1$bca[1,4:5])
+rm(slp, b, b1)
+```
+
+```{r}
+# grazing_corr
+slp <- function(path1_mod2_lm) coef(path1_mod2_lm)[4]
+b <- car::Boot(path1_mod2_lm,slp, R=10000) # note the capital B
+b1 <- boot::boot.ci(b,type="bca")
+grazing_corr_ci <- as.data.frame(b1$bca[1,4:5])
+rm(slp, b, b1)
+```
+
+```{r}
+# prop_pred_seeds
+slp <- function(path1_mod2_lm) coef(path1_mod2_lm)[5]
+b <- car::Boot(path1_mod2_lm,slp, R=10000) # note the capital B
+b1 <- boot::boot.ci(b,type="bca")
+prop_pred_seeds_ci <- as.data.frame(b1$bca[1,4:5])
+rm(slp, b, b1)
+```
+
+```{r}
+# Save confidence intervals as a table
+lower_A <- rbind(FFD_s_y_ci[1,] ,n_fl_s_y_ci[1,])
+lower_B <- rbind(lower_A ,grazing_corr_ci[1,])
+lower_C <- rbind(lower_B ,prop_pred_seeds_ci[1,])
+lower <- lower_C
+
+upper_A <- rbind(FFD_s_y_ci[2,] ,n_fl_s_y_ci[2,])
+upper_B <- rbind(upper_A ,grazing_corr_ci[2,])
+upper_C <- rbind(upper_B ,prop_pred_seeds_ci[2,])
+upper <- upper_C
+
+
+BCIs_path1_mod2_lm <- cbind(lower, upper) 
+rownames(BCIs_path1_mod2_lm) <- c("FFD_s_y","n_fl_s_y",
+                                  "grazing_corr","prop_pred_seeds")
+BCIs_path1_mod2_lm
+```
+
+Similar to significances in the lmer model (except for FFD_s_y where intervals overlap zero here). Maybe we can stay with the percentile intervals?
+
+New model path1
+
+```{r message=FALSE, warning=FALSE}
+summary(path1_mod1)$coefficients 
+# std coefs if needed from path1 without id
+summary(path1_mod2)$coefficients 
+# get significances from bootstrapped CIs, std coefs from path1 without id
+summary(path1_mod3_bb)$coefficients 
+# significances and ustd coefs from here, std if needed from path1 without id
+summary(path1_mod4_bb)$coefficients 
+# significances and ustd coefs from here, std if needed from path1 without id
+```
+piecewiseSEM does not work with glmmTMB - and that is the only package I found that fits betabinomial mixed models.
+
+```{r message=FALSE, warning=FALSE}
+path1_noid<-psem(
+  glm(seeds_01~FFD_s_y+n_fl_s_y+grazing_corr,
+                data=data_selag,family="binomial"),
+  lm(fitness_rel_y~FFD_s_y+n_fl_s_y+grazing_corr+prop_pred_seeds,
+               data=data_selag),
+  glm(grazing_corr~FFD_s_y+n_fl_s_y,
+                  data=data_selag,family="binomial",weights=grazing_weights),
+  glm(prop_pred_seeds~FFD_s_y+n_fl_s_y,
+                  data=data_selag,family="binomial",
+                  weights=n_seeds))
+coefs(path1_noid) 
+plot(path1_noid)
+```
+
+# Path model H3
+
+H3: Variation in climatic conditions during spring among years causes differences in selection on flowering time, through effects mediated by the intensity of biotic interactions. Also direct effects of climate on selection.
+
+Using FFD and n_fl standardized across years (FFD_s and n_fl_s), and fitness relativized across years (fitness_rel).
+
+Calculate FFD_s, n_fl_s and fitness_rel:
+
+```{r}
+data_selag<-data_selag%>% 
+  ungroup()%>%
+  mutate(FFD_s=scale(FFD),
+         n_fl_s=scale(n_fl),
+         fitness_rel=n_intact_seeds/mean(n_intact_seeds,na.rm=T))
+```
+
+Component models path 3
+
+```{r message=FALSE, warning=FALSE}
+path2_mod1<-glmer(seeds_01~FFD_s+n_fl_s+grazing_corr+grazing_corr:FFD_s+
+                    (1|id)+(1|year),data=data_selag,family="binomial")
+path2_mod2<-lmer(fitness_rel~FFD_s+n_fl_s+grazing_corr+prop_pred_seeds+
+                   FFD_s:grazing_corr+FFD_s:prop_pred_seeds+(1|id)+(1|year),
+                 data=data_selag)
+path2_mod3<-lmer(FFD_s~mean_3+mean_4+mean_5+(1|id),data_selag)
+path2_mod4<-glmer(grazing_corr~mean_3+mean_4+mean_5+(1|id),
+                  data=data_selag,family="binomial",weights=grazing_weights)
+# random effect of year not needed - temperatures "are" year
+path2_mod5<-glmer(prop_pred_seeds~mean_3+mean_4+mean_5+mean_6+(1|id),
+                  data=data_selag,family="binomial",weights=n_seeds)
+# random effect of year not needed - temperatures "are" year
+# convergence problems in glmer but not in glmmTMB
+```
+
+```{r}
+nobs(path2_mod1)
+nobs(path2_mod2)
+nobs(path2_mod3)
+nobs(path2_mod4)
+nobs(path2_mod5)
+```
+
+```{r message=FALSE, warning=FALSE}
+path2_mod4_glmmTMB<-glmmTMB(grazing_corr~mean_3+mean_4+mean_5+(1|id),
+                  data=data_selag,family="binomial",weights=grazing_weights)
+path2_mod5_glmmTMB<-glmmTMB(prop_pred_seeds~mean_3+mean_4+mean_5+mean_6+(1|id),
+                  data=data_selag,family="binomial",weights=round(n_seeds))
+# Using glmmTMB cause using glmer gave error in DHARMa, results are similar
+# Also needs round() to avoid errors in DHARMa
+```
+
+Model diagnostics with DHARMa
+ 
+```{r message=FALSE, warning=FALSE}
+sim_path2_mod1 <- simulateResiduals(fittedModel = path2_mod1, n = 5000) 
+sim_path2_mod2 <- simulateResiduals(fittedModel = path2_mod2, n = 5000) 
+sim_path2_mod3 <- simulateResiduals(fittedModel = path2_mod3, n = 5000) 
+sim_path2_mod4 <- simulateResiduals(fittedModel = path2_mod4_glmmTMB, n = 5000) 
+sim_path2_mod5 <- simulateResiduals(fittedModel = path2_mod5_glmmTMB, n = 5000) 
+```
+
+qq-plot  and plot of residuals vs. predicted:
+
+```{r}
+plot(sim_path2_mod1,quantreg=T) # close to OK
+plot(sim_path2_mod2,quantreg=T) # not OK - calculate BCA intervals
+plot(sim_path2_mod3,quantreg=T) # not OK - see what to do
+# Add square terms?
+# plot residuals against predictors?
+plot(sim_path2_mod4,quantreg=T) # not OK - use betabinomial
+plot(sim_path2_mod5,quantreg=T) # not OK - use betabinomial
+```
+
+```{r}
+testDispersion(sim_path2_mod1) # a bit overdispersed
+testDispersion(sim_path2_mod4)
+testDispersion(sim_path2_mod4,alternative="less") # slightly underdispersed
+testDispersion(sim_path2_mod5) # a bit overdispersed
+```
+
+Plot residuals against the predictors in the model
+
+```{r}
+par(mfrow=c(1,3))
+plotResiduals(sim_path2_mod3,
+              subset(data_selag,!is.na(FFD_s))$mean_3,
+              main="Residuals vs mean_3",quantreg = T)
+plotResiduals(sim_path2_mod3,
+              subset(data_selag,!is.na(FFD_s))$mean_4,
+              main="Residuals vs mean_4",quantreg = T)
+plotResiduals(sim_path2_mod3,
+              subset(data_selag,!is.na(FFD_s))$mean_5,
+              main="Residuals vs mean_5",quantreg = T)
+
+```
+
+Refit models 1,4 and 5 with betabinomial distribution.
+
+```{r message=FALSE, warning=FALSE}
+path2_mod1_bb<-glmmTMB(seeds_01~FFD_s+n_fl_s+grazing_corr+grazing_corr:FFD_s+
+                    (1|id)+(1|year),data=data_selag,family="betabinomial")
+path2_mod4_bb<-glmmTMB(grazing_corr~mean_3+mean_4+mean_5+(1|id),
+                  data=data_selag,family="betabinomial",weights=grazing_weights)
+path2_mod5_bb<-glmmTMB(prop_pred_seeds~mean_3+mean_4+mean_5+mean_6+(1|id),
+                  data=data_selag,family="betabinomial",weights=round(n_seeds))
+```
+
+Model diagnostics with DHARMa
+ 
+```{r message=FALSE, warning=FALSE}
+sim_path2_mod1_bb <- simulateResiduals(fittedModel = path2_mod1_bb, n = 5000) 
+sim_path2_mod4_bb <- simulateResiduals(fittedModel = path2_mod4_bb, n = 5000) 
+sim_path2_mod5_bb <- simulateResiduals(fittedModel = path2_mod5_bb, n = 5000) 
+```
+
+qq-plot  and plot of residuals vs. predicted:
+
+```{r}
+plot(sim_path2_mod1_bb,quantreg=T) # 
+plot(sim_path2_mod4_bb,quantreg=T) # 
+plot(sim_path2_mod5_bb,quantreg=T) # 
+```
+
+These should be OK.
+
+Calculate bootstrapped CIs for models 2 and 3.
+
+Boostrapped confidence intervals for model 2:
+
+```{r}
+b_par<-bootMer(x=path2_mod2,FUN=fixef,nsim=10000)
+```
+
+
+```{r}
+confint(b_par,level=0.95, method="boot") # Percentile method
+```
+
+Similar to significances in the lmer model.
+
+Boostrapped confidence intervals for model 3:
+
+```{r}
+b_par<-bootMer(x=path2_mod2,FUN=fixef,nsim=10000)
+```
+
+
+```{r}
+confint(b_par,level=0.95, method="boot") # Percentile method
+```
+
+Similar to significances in the lmer model.
+
+See if we calculate also BCA intervals for linear models without random effects.
+
+New model path2
+
+```{r message=FALSE, warning=FALSE}
+summary(glmmTMB(seeds_01~FFD_s+n_fl_s+grazing_corr+grazing_corr:FFD_s+
+                    (1|id)+(1|year),data=data_selag,family="betabinomial"))
+# std coefs if needed from path2 without id and year
+summary(lmer(fitness_rel~FFD_s+n_fl_s+grazing_corr+prop_pred_seeds+
+                   FFD_s:grazing_corr+FFD_s:prop_pred_seeds+(1|id)+(1|year),
+                 data=data_selag))
+# get significances from bootstrapped CIs, std coefs from path2 without id and year
+summary(lmer(FFD_s~mean_3+mean_4+mean_5+(1|id),data_selag))
+# get significances from bootstrapped CIs, std coefs from path2 without id and year
+summary(glmmTMB(grazing_corr~mean_3+mean_4+mean_5+(1|id),
+                  data=data_selag,family="betabinomial",weights=grazing_weights))
+# significances and ustd coefs from here, std if needed from path2 without id
+summary(glmmTMB(prop_pred_seeds~mean_3+mean_4+mean_5+mean_6+(1|id),
+                  data=data_selag,family="betabinomial",weights=round(n_seeds)))
+# significances and ustd coefs from here, std if needed from path2 without id
+```
+
+
+
+
+# OLD STUFF BELOW HERE
 
 # 2. Models for each interaction
 
