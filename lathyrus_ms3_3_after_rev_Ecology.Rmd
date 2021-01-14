@@ -32,6 +32,8 @@ library(piecewiseSEM)
 library(glmmTMB)
 library(DHARMa)
 library(performance)
+library(viridis)
+library(ggforce)
 ```
 
 ```{r Define ggplot themes and palettes, include=FALSE}
@@ -216,58 +218,7 @@ data_selag$gr_failure<-NULL
 data_selag$weights<-NULL
 head(data_selag)
 ```
-
-# Appendix S5: Raw relationships interactions ~ FFD in different years
-
-# NOTE: Revise naming of appendices!
-
-## Grazing
-
-```{r echo=FALSE, fig.height=10, fig.width=8, message=FALSE, warning=FALSE}
-ggplot(subset(data_selag,year<2009),
-       aes(x=FFD,y=grazing_success/(grazing_success+grazing_failure),
-                      succ=grazing_success, fail=grazing_failure))+my_theme()+
-  geom_point(size=1,alpha=0.1)+
-  geom_smooth(method="glm",method.args=list(family="binomial"),
-              formula=cbind(succ,fail)~x,se=T,color="black",size=0.5)+
-  facet_wrap(~year,ncol=3,scales="free")+ylab("Grazing")+xlab("FFD")
-ggsave(filename="output/figures/AppendixS5_1A.tiff",device="tiff",width=168,
-       height=210,units="mm",dpi=300,compression="lzw")
-ggplot(subset(data_selag,year>2008),
-       aes(x=FFD,y=grazing_success/(grazing_success+grazing_failure),
-                      succ=grazing_success, fail=grazing_failure))+my_theme()+
-  geom_point(size=1,alpha=0.1)+
-  geom_smooth(method="glm",method.args=list(family="binomial"),
-              formula=cbind(succ,fail)~x,se=T,color="black",size=0.5)+
-  facet_wrap(~year,ncol=3,scales="free")+ylab("Grazing")+xlab("FFD")
-ggsave(filename="output/figures/AppendixS5_1B.tiff",device="tiff",width=168,
-       height=158,units="mm",dpi=300,compression="lzw")
-```
-
-## Predation
-
-```{r echo=FALSE, fig.height=10, fig.width=8, message=FALSE, warning=FALSE}
-ggplot(subset(data_selag,year<2009),
-       aes(x=FFD,y=n_pred_seeds/(n_pred_seeds+n_intact_seeds),
-                      succ=n_pred_seeds, fail=n_intact_seeds))+my_theme()+
-  geom_point(size=1,alpha=0.1)+
-  geom_smooth(method="glm",method.args=list(family="binomial"),
-              formula=cbind(succ,fail)~x,se=T,color="black",size=0.5)+
-  facet_wrap(~year,ncol=3,scales="free")+ylab("Seed predation")+xlab("FFD")
-ggsave(filename="output/figures/AppendixS5_2A.tiff",device="tiff",width=168,
-       height=210,units="mm",dpi=300,compression="lzw")
-ggplot(subset(data_selag,year>2008),
-       aes(x=FFD,y=n_pred_seeds/(n_pred_seeds+n_intact_seeds),
-                      succ=n_pred_seeds, fail=n_intact_seeds))+my_theme()+
-  geom_point(size=1,alpha=0.1)+
-  geom_smooth(method="glm",method.args=list(family="binomial"),
-              formula=cbind(succ,fail)~x,se=T,color="black",size=0.5)+
-  facet_wrap(~year,ncol=3,scales="free")+ylab("Seed predation")+xlab("FFD")
-ggsave(filename="output/figures/AppendixS5_2B.tiff",device="tiff",width=168,
-       height=158,units="mm",dpi=300,compression="lzw")
-```
-
-# Path model H1 and H2
+# H1 and H2: path model
 
 H1: Flowering phenology of individuals influences the intensities of interactions with seed predators and grazers.
 
@@ -297,15 +248,15 @@ data_selag$seeds_01<-with(data_selag,ifelse(is.na(n_seeds),NA,
 
 
 ```{r message=FALSE, warning=FALSE}
-path1_mod1<-glmer(seeds_01~FFD_s_y+n_fl_s_y+grazing_corr+(1|id),
+path1_mod1<-glmmTMB(seeds_01~FFD_s_y+n_fl_s_y+grazing_corr+(1|id)+(1|year),
                 data=data_selag,family="binomial")
-path1_mod2<-lmer(fitness_rel_y~FFD_s_y+n_fl_s_y+grazing_corr+prop_pred_seeds+(1|id),
-               data=data_selag)
-path1_mod3<-glmer(grazing_corr~FFD_s_y+n_fl_s_y+(1|id),
+path1_mod2<-glmmTMB(fitness_rel_y~FFD_s_y+n_fl_s_y+grazing_corr+prop_pred_seeds+
+                   (1|id)+(1|year),data=data_selag)
+path1_mod3<-glmmTMB(grazing_corr~FFD_s_y+n_fl_s_y+(1|id)+(1|year),
                   data=data_selag,family="binomial",weights=grazing_weights)
-path1_mod4<-glmer(prop_pred_seeds~FFD_s_y+n_fl_s_y+(1|id),
+path1_mod4<-glmmTMB(prop_pred_seeds~FFD_s_y+n_fl_s_y+(1|id)+(1|year),
                   data=data_selag,family="binomial",
-                  weights=n_seeds)
+                  weights=round(n_seeds))
 ```
 
 ```{r}
@@ -314,32 +265,14 @@ nobs(path1_mod2)
 nobs(path1_mod3)
 nobs(path1_mod4)
 ```
-```{r message=FALSE, warning=FALSE}
-path1<-psem(path1_mod1,path1_mod2,path1_mod3,path1_mod4)
-coefs(path1) 
-plot(path1,show="unstd") 
-```
 
-piecewiseSEM does not give standardized effects for binomial GLMMs --> we could take the missing standardized effects from models without the random effects.
-
-```{r message=FALSE, warning=FALSE}
-path1_mod3_glmmTMB<-glmmTMB(grazing_corr~FFD_s_y+n_fl_s_y+(1|id),
-                            data=data_selag,family="binomial",
-                            weights=grazing_weights)
-path1_mod4_glmmTMB<-glmmTMB(prop_pred_seeds~FFD_s_y+n_fl_s_y+(1|id),
-                            data=data_selag,family="binomial",
-                            weights=round(n_seeds))
-# Using glmmTMB cause using glmer gave error in DHARMa, results are similar
-# Also needs round() to avoid errors in DHARMa
-```
-
-Model diagnostics with DHARMa
+## Model diagnostics
  
 ```{r message=FALSE, warning=FALSE}
 sim_path1_mod1 <- simulateResiduals(fittedModel = path1_mod1, n = 5000) 
 sim_path1_mod2 <- simulateResiduals(fittedModel = path1_mod2, n = 5000) 
-sim_path1_mod3 <- simulateResiduals(fittedModel = path1_mod3_glmmTMB, n = 5000) 
-sim_path1_mod4 <- simulateResiduals(fittedModel = path1_mod4_glmmTMB, n = 5000) 
+sim_path1_mod3 <- simulateResiduals(fittedModel = path1_mod3, n = 5000) 
+sim_path1_mod4 <- simulateResiduals(fittedModel = path1_mod4, n = 5000) 
 ```
 
 qq-plot  and plot of residuals vs. predicted:
@@ -352,22 +285,27 @@ plot(sim_path1_mod4,quantreg=T) # not OK
 ```
 
 ```{r}
-testDispersion(sim_path1_mod3) # underdispersed
-testDispersion(sim_path1_mod4) # overdispersed
+testDispersion(sim_path1_mod3) # OK
+testDispersion(sim_path1_mod4) # OK
 ```
 
-Refit models 3 and 4 with betabinomial distribution.
+```{r}
+testZeroInflation(sim_path1_mod3) # significant
+testZeroInflation(sim_path1_mod4) # significant
+```
+
+## Refit models 3 and 4 with betabinomial distribution.
 
 ```{r message=FALSE, warning=FALSE}
-path1_mod3_bb<-glmmTMB(grazing_corr~FFD_s_y+n_fl_s_y+(1|id),
+path1_mod3_bb<-glmmTMB(grazing_corr~FFD_s_y+n_fl_s_y+(1|id)+(1|year),
                             data=data_selag,family="betabinomial",
                             weights=grazing_weights)
-path1_mod4_bb<-glmmTMB(prop_pred_seeds~FFD_s_y+n_fl_s_y+(1|id),
+path1_mod4_bb<-glmmTMB(prop_pred_seeds~FFD_s_y+n_fl_s_y+(1|id)+(1|year),
                             data=data_selag,family="betabinomial",
                             weights=round(n_seeds))
 ```
 
-Model diagnostics with DHARMa
+### Model diagnostics
  
 ```{r message=FALSE, warning=FALSE}
 sim_path1_mod3_bb <- simulateResiduals(fittedModel = path1_mod3_bb, n = 5000) 
@@ -388,40 +326,39 @@ From https://github.com/florianhartig/DHARMa/issues/181
 "the p-value shows you that there is a significant deviation from the assumed distribution, but significance != effect size. In other words, if you have a large number of data points (as you have here), even the slightest deviation will become significant. [...] the qq-plot is nearly linear, suggesting that the overall distribution is roughly OK.
 
 ```{r}
-testDispersion(sim_path1_mod3_bb) # still a bit of underdispersion probably OK
-testDispersion(sim_path1_mod4_bb) # no overdispersion
+testDispersion(sim_path1_mod3_bb) # a bit of underdispersion, probably OK
+testDispersion(sim_path1_mod4_bb) # OK
 ```
-
-Plot residuals against the predictors in the model
 
 ```{r}
-par(mfrow=c(2,2))
-plotResiduals(sim_path1_mod3_bb,
-              subset(data_selag,!is.na(FFD_s_y)&!is.na(n_fl_s_y)&
-                       !is.na(grazing_corr)&!is.na(grazing_weights))$FFD_s_y,
-              main="Residuals vs FFD_s_y",quantreg = T)
-plotResiduals(sim_path1_mod3_bb,
-              subset(data_selag,!is.na(FFD_s_y)&!is.na(n_fl_s_y)&
-                       !is.na(grazing_corr)&!is.na(grazing_weights))$n_fl_s_y,
-              main="Residuals vs n_fl_s_y",quantreg = T)
-plotResiduals(sim_path1_mod4_bb,
-              subset(data_selag,!is.na(FFD_s_y)&!is.na(n_fl_s_y)&
-                       !is.na(prop_pred_seeds)&!is.na(n_seeds))$FFD_s_y,
-              main="Residuals vs FFD_s_y",quantreg = T)
-plotResiduals(sim_path1_mod4_bb,
-              subset(data_selag,!is.na(FFD_s_y)&!is.na(n_fl_s_y)&
-                       !is.na(prop_pred_seeds)&!is.na(n_seeds))$n_fl_s_y,
-              main="Residuals vs n_fl_s_y",quantreg = T)
+testZeroInflation(sim_path1_mod3_bb) # OK
+testZeroInflation(sim_path1_mod4_bb) # OK
 ```
 
-They look OK (but keep an eye on FFD_s_y for mod4).
+```{r}
+anova(path1_mod3,path1_mod3_bb)
+anova(path1_mod4,path1_mod4_bb)
+AIC(path1_mod3,path1_mod3_bb)
+AIC(path1_mod4,path1_mod4_bb)
+```
+
+Use betabinomial models.
 
 Tested quadratic effects of FFD on grazing and seed predation, and they were not significant in betabinomial models. 
 
-Boostrapped confidence intervals for model 2:
+## Boostrapped confidence intervals for model 2:
+
+### Mixed model
 
 ```{r}
-b_par<-bootMer(x=path1_mod2,FUN=fixef,nsim=10000)
+path1_mod2_glmer<-glmer(fitness_rel_y~FFD_s_y+n_fl_s_y+grazing_corr+
+                          prop_pred_seeds+(1|id)+(1|year),data=data_selag)
+# We need to use glmer for this
+```
+
+
+```{r}
+b_par<-bootMer(x=path1_mod2_glmer,FUN=fixef,nsim=10000)
 ```
 
 
@@ -431,21 +368,22 @@ confint(b_par,level=0.95, method="boot") # Percentile method
 
 Similar to significances in the lmer model.
 
-For linear model without the random effect:
+### LM (Elsa's code)
 
 ```{r}
-path1_mod2_lm<-lm(fitness_rel_y~FFD_s_y+n_fl_s_y+grazing_corr+prop_pred_seeds,
-               data=subset(data_selag,
-                           !is.na(fitness_rel_y)&!is.na(FFD_s_y)&
-                             !is.na(n_fl_s_y)&!is.na(grazing_corr)&
-                             !is.na(prop_pred_seeds)))
+path1_mod2_LM<-lm(fitness_rel_y~FFD_s_y+n_fl_s_y+grazing_corr+
+                          prop_pred_seeds,
+                  data=subset(data_selag,!is.na(fitness_rel_y)&
+                                                  !is.na(FFD_s_y)&
+                                                  !is.na(n_fl_s_y)&
+                                                  !is.na(grazing_corr)&
+                                                  !is.na(prop_pred_seeds)))
 ```
-
 
 ```{r}
 # FFD_s_y
-slp <- function(path1_mod2_lm) coef(path1_mod2_lm)[2]
-b <- car::Boot(path1_mod2_lm,slp, R=10000) # note the capital B
+slp <- function(path1_mod2_LM) coef(path1_mod2_LM)[2]
+b <- car::Boot(path1_mod2_LM,slp, R=10000) # note the capital B
 b1 <- boot::boot.ci(b,type="bca")
 FFD_s_y_ci <- as.data.frame(b1$bca[1,4:5])
 rm(slp, b, b1)
@@ -453,8 +391,8 @@ rm(slp, b, b1)
 
 ```{r}
 # n_fl_s_y
-slp <- function(path1_mod2_lm) coef(path1_mod2_lm)[3]
-b <- car::Boot(path1_mod2_lm,slp, R=10000) # note the capital B
+slp <- function(path1_mod2_LM) coef(path1_mod2_LM)[3]
+b <- car::Boot(path1_mod2_LM,slp, R=10000) # note the capital B
 b1 <- boot::boot.ci(b,type="bca")
 n_fl_s_y_ci <- as.data.frame(b1$bca[1,4:5])
 rm(slp, b, b1)
@@ -462,8 +400,8 @@ rm(slp, b, b1)
 
 ```{r}
 # grazing_corr
-slp <- function(path1_mod2_lm) coef(path1_mod2_lm)[4]
-b <- car::Boot(path1_mod2_lm,slp, R=10000) # note the capital B
+slp <- function(path1_mod2_LM) coef(path1_mod2_LM)[4]
+b <- car::Boot(path1_mod2_LM,slp, R=10000) # note the capital B
 b1 <- boot::boot.ci(b,type="bca")
 grazing_corr_ci <- as.data.frame(b1$bca[1,4:5])
 rm(slp, b, b1)
@@ -471,8 +409,8 @@ rm(slp, b, b1)
 
 ```{r}
 # prop_pred_seeds
-slp <- function(path1_mod2_lm) coef(path1_mod2_lm)[5]
-b <- car::Boot(path1_mod2_lm,slp, R=10000) # note the capital B
+slp <- function(path1_mod2_LM) coef(path1_mod2_LM)[5]
+b <- car::Boot(path1_mod2_LM,slp, R=10000) # note the capital B
 b1 <- boot::boot.ci(b,type="bca")
 prop_pred_seeds_ci <- as.data.frame(b1$bca[1,4:5])
 rm(slp, b, b1)
@@ -490,31 +428,30 @@ upper_B <- rbind(upper_A ,grazing_corr_ci[2,])
 upper_C <- rbind(upper_B ,prop_pred_seeds_ci[2,])
 upper <- upper_C
 
-
-BCIs_path1_mod2_lm <- cbind(lower, upper) 
-rownames(BCIs_path1_mod2_lm) <- c("FFD_s_y","n_fl_s_y",
-                                  "grazing_corr","prop_pred_seeds")
-BCIs_path1_mod2_lm
+BCIs_path1_mod2_LM <- cbind(lower, upper) 
+rownames(BCIs_path1_mod2_LM) <- c("FFD_s_y","n_fl_s_y",
+                                   "grazing_corr","prop_pred_seeds")
+BCIs_path1_mod2_LM
 ```
 
-Similar to significances in the lmer model (except for FFD_s_y where intervals overlap zero here). Maybe we can stay with the percentile intervals?
+Similar to significances in the lmer model except for grazing, where the CIs overlap zero here. Use only percentile method?
 
-New model path1
+## New path  model
 
 ```{r message=FALSE, warning=FALSE}
 summary(path1_mod1)$coefficients 
-# std coefs if needed from path1 without id
+# std coefs if needed from path1 without random effects
 summary(path1_mod2)$coefficients 
-# get significances from bootstrapped CIs, std coefs from path1 without id
+# get significances from bootstrapped CIs, std coefs from path1 without random effects
 summary(path1_mod3_bb)$coefficients 
-# significances and ustd coefs from here, std if needed from path1 without id
+# significances and ustd coefs from here, std if needed from path1 without random effects
 summary(path1_mod4_bb)$coefficients 
-# significances and ustd coefs from here, std if needed from path1 without id
+# significances and ustd coefs from here, std if needed from path1 without random effects
 ```
 piecewiseSEM does not work with glmmTMB - and that is the only package I found that fits betabinomial mixed models.
 
 ```{r message=FALSE, warning=FALSE}
-path1_noid<-psem(
+path1_norandom<-psem(
   glm(seeds_01~FFD_s_y+n_fl_s_y+grazing_corr,
                 data=data_selag,family="binomial"),
   lm(fitness_rel_y~FFD_s_y+n_fl_s_y+grazing_corr+prop_pred_seeds,
@@ -524,801 +461,347 @@ path1_noid<-psem(
   glm(prop_pred_seeds~FFD_s_y+n_fl_s_y,
                   data=data_selag,family="binomial",
                   weights=n_seeds))
-coefs(path1_noid) 
-plot(path1_noid)
+coefs(path1_norandom) 
+plot(path1_norandom)
 ```
 
-# Path model H3
+Figure 1: Path diagram (made in Inkscape)
 
-H3: Variation in climatic conditions during spring among years causes differences in selection on flowering time, through effects mediated by the intensity of biotic interactions. Also direct effects of climate on selection.
-
-Using FFD and n_fl standardized across years (FFD_s and n_fl_s), and fitness relativized across years (fitness_rel).
-
-Calculate FFD_s, n_fl_s and fitness_rel:
+% of grazed plants that produced seeds
 
 ```{r}
-data_selag<-data_selag%>% 
-  ungroup()%>%
-  mutate(FFD_s=scale(FFD),
-         n_fl_s=scale(n_fl),
-         fitness_rel=n_intact_seeds/mean(n_intact_seeds,na.rm=T))
+nrow(subset(data_selag,grazing_corr>0&n_seeds>0))*100/
+  nrow(subset(data_selag,grazing_corr>0))
 ```
 
-Component models path 3
-
-```{r message=FALSE, warning=FALSE}
-path2_mod1<-glmer(seeds_01~FFD_s+n_fl_s+grazing_corr+grazing_corr:FFD_s+
-                    (1|id)+(1|year),data=data_selag,family="binomial")
-path2_mod2<-lmer(fitness_rel~FFD_s+n_fl_s+grazing_corr+prop_pred_seeds+
-                   FFD_s:grazing_corr+FFD_s:prop_pred_seeds+(1|id)+(1|year),
-                 data=data_selag)
-path2_mod3<-lmer(FFD_s~mean_3+mean_4+mean_5+(1|id),data_selag)
-path2_mod4<-glmer(grazing_corr~mean_3+mean_4+mean_5+(1|id),
-                  data=data_selag,family="binomial",weights=grazing_weights)
-# random effect of year not needed - temperatures "are" year
-path2_mod5<-glmer(prop_pred_seeds~mean_3+mean_4+mean_5+mean_6+(1|id),
-                  data=data_selag,family="binomial",weights=n_seeds)
-# random effect of year not needed - temperatures "are" year
-# convergence problems in glmer but not in glmmTMB
-```
+% of plants with more than half of their above-ground structures removed that produced seeds
 
 ```{r}
-nobs(path2_mod1)
-nobs(path2_mod2)
-nobs(path2_mod3)
-nobs(path2_mod4)
-nobs(path2_mod5)
+nrow(subset(data_selag,grazing_corr>0.5&n_seeds>0))*100/
+  nrow(subset(data_selag,grazing_corr>0))
 ```
 
-```{r message=FALSE, warning=FALSE}
-path2_mod4_glmmTMB<-glmmTMB(grazing_corr~mean_3+mean_4+mean_5+(1|id),
-                  data=data_selag,family="binomial",weights=grazing_weights)
-path2_mod5_glmmTMB<-glmmTMB(prop_pred_seeds~mean_3+mean_4+mean_5+mean_6+(1|id),
-                  data=data_selag,family="binomial",weights=round(n_seeds))
-# Using glmmTMB cause using glmer gave error in DHARMa, results are similar
-# Also needs round() to avoid errors in DHARMa
-```
+Only 29% of plants that experienced any grazing produced seeds, and 6% of plants that had more than half of their above-ground structures removed.
 
-Model diagnostics with DHARMa
- 
-```{r message=FALSE, warning=FALSE}
-sim_path2_mod1 <- simulateResiduals(fittedModel = path2_mod1, n = 5000) 
-sim_path2_mod2 <- simulateResiduals(fittedModel = path2_mod2, n = 5000) 
-sim_path2_mod3 <- simulateResiduals(fittedModel = path2_mod3, n = 5000) 
-sim_path2_mod4 <- simulateResiduals(fittedModel = path2_mod4_glmmTMB, n = 5000) 
-sim_path2_mod5 <- simulateResiduals(fittedModel = path2_mod5_glmmTMB, n = 5000) 
-```
+# H3
 
-qq-plot  and plot of residuals vs. predicted:
+H3: Variation in climatic conditions during spring among years causes differences in selection on flowering time, through effects mediated by the intensity of biotic interactions. 
 
-```{r}
-plot(sim_path2_mod1,quantreg=T) # close to OK
-plot(sim_path2_mod2,quantreg=T) # not OK - calculate BCA intervals
-plot(sim_path2_mod3,quantreg=T) # not OK - see what to do
-# Add square terms?
-# plot residuals against predictors?
-plot(sim_path2_mod4,quantreg=T) # not OK - use betabinomial
-plot(sim_path2_mod5,quantreg=T) # not OK - use betabinomial
-```
+# H3 - Part 1
 
-```{r}
-testDispersion(sim_path2_mod1) # a bit overdispersed
-testDispersion(sim_path2_mod4)
-testDispersion(sim_path2_mod4,alternative="less") # slightly underdispersed
-testDispersion(sim_path2_mod5) # a bit overdispersed
-```
+Variation in climatic conditions during spring among years influences the intensity of biotic interactions. 
 
-Plot residuals against the predictors in the model
-
-```{r}
-par(mfrow=c(1,3))
-plotResiduals(sim_path2_mod3,
-              subset(data_selag,!is.na(FFD_s))$mean_3,
-              main="Residuals vs mean_3",quantreg = T)
-plotResiduals(sim_path2_mod3,
-              subset(data_selag,!is.na(FFD_s))$mean_4,
-              main="Residuals vs mean_4",quantreg = T)
-plotResiduals(sim_path2_mod3,
-              subset(data_selag,!is.na(FFD_s))$mean_5,
-              main="Residuals vs mean_5",quantreg = T)
-
-```
-
-Refit models 1,4 and 5 with betabinomial distribution.
-
-```{r message=FALSE, warning=FALSE}
-path2_mod1_bb<-glmmTMB(seeds_01~FFD_s+n_fl_s+grazing_corr+grazing_corr:FFD_s+
-                    (1|id)+(1|year),data=data_selag,family="betabinomial")
-path2_mod4_bb<-glmmTMB(grazing_corr~mean_3+mean_4+mean_5+(1|id),
-                  data=data_selag,family="betabinomial",weights=grazing_weights)
-path2_mod5_bb<-glmmTMB(prop_pred_seeds~mean_3+mean_4+mean_5+mean_6+(1|id),
-                  data=data_selag,family="betabinomial",weights=round(n_seeds))
-```
-
-Model diagnostics with DHARMa
- 
-```{r message=FALSE, warning=FALSE}
-sim_path2_mod1_bb <- simulateResiduals(fittedModel = path2_mod1_bb, n = 5000) 
-sim_path2_mod4_bb <- simulateResiduals(fittedModel = path2_mod4_bb, n = 5000) 
-sim_path2_mod5_bb <- simulateResiduals(fittedModel = path2_mod5_bb, n = 5000) 
-```
-
-qq-plot  and plot of residuals vs. predicted:
-
-```{r}
-plot(sim_path2_mod1_bb,quantreg=T) # 
-plot(sim_path2_mod4_bb,quantreg=T) # 
-plot(sim_path2_mod5_bb,quantreg=T) # 
-```
-
-These should be OK.
-
-Calculate bootstrapped CIs for models 2 and 3.
-
-Boostrapped confidence intervals for model 2:
-
-```{r}
-b_par<-bootMer(x=path2_mod2,FUN=fixef,nsim=10000)
-```
-
-
-```{r}
-confint(b_par,level=0.95, method="boot") # Percentile method
-```
-
-Similar to significances in the lmer model.
-
-Boostrapped confidence intervals for model 3:
-
-```{r}
-b_par<-bootMer(x=path2_mod2,FUN=fixef,nsim=10000)
-```
-
-
-```{r}
-confint(b_par,level=0.95, method="boot") # Percentile method
-```
-
-Similar to significances in the lmer model.
-
-See if we calculate also BCA intervals for linear models without random effects.
-
-New model path2
-
-```{r message=FALSE, warning=FALSE}
-summary(glmmTMB(seeds_01~FFD_s+n_fl_s+grazing_corr+grazing_corr:FFD_s+
-                    (1|id)+(1|year),data=data_selag,family="betabinomial"))
-# std coefs if needed from path2 without id and year
-summary(lmer(fitness_rel~FFD_s+n_fl_s+grazing_corr+prop_pred_seeds+
-                   FFD_s:grazing_corr+FFD_s:prop_pred_seeds+(1|id)+(1|year),
-                 data=data_selag))
-# get significances from bootstrapped CIs, std coefs from path2 without id and year
-summary(lmer(FFD_s~mean_3+mean_4+mean_5+(1|id),data_selag))
-# get significances from bootstrapped CIs, std coefs from path2 without id and year
-summary(glmmTMB(grazing_corr~mean_3+mean_4+mean_5+(1|id),
-                  data=data_selag,family="betabinomial",weights=grazing_weights))
-# significances and ustd coefs from here, std if needed from path2 without id
-summary(glmmTMB(prop_pred_seeds~mean_3+mean_4+mean_5+mean_6+(1|id),
-                  data=data_selag,family="betabinomial",weights=round(n_seeds)))
-# significances and ustd coefs from here, std if needed from path2 without id
-```
-
-
-
-
-# OLD STUFF BELOW HERE
-
-# 2. Models for each interaction
-
-Including the effects of FFD standardized within years (FFD_s_y), yearly mean of FFD (FFD_mean), yearly standard deviation of FFD (FFD_sd), and the interactions FFD_s_y:FFD_mean andn FFD_s_y:FFD_sd.
-
-Calculate FFD_s_y, FFD_mean and FFD_sd:
-
-```{r}
-data_selag<-data_selag%>% 
-  dplyr::group_by(year) %>% 
-  dplyr::mutate(FFD_mean=mean(FFD,na.rm=T),
-         FFD_sd=sd(FFD,na.rm=T),
-         FFD_s_y=(FFD-FFD_mean)/FFD_sd)
-```
+First, models to test the effect of spring temperatures on antagonistic interactions, while accounting for FFD and number of flowers. Using FFD and number of flowers standardized within years, temperatures standardized across years. NOT including interactions among FFD and temperatures. NOT including a random effect of year because there is only one value of temperature for each year. 
 
 ## Grazing
 
-### Global models
-
 ```{r message=FALSE, warning=FALSE}
-data_selag_subset1<-subset(data_selag,!is.na(grazing_success)&!is.na(FFD)&!is.na(n_fl))
-globmod_grazing_A<-glmer(cbind(grazing_success,grazing_failure)~
-                           (scale(mean_3)+scale(mean_4)+scale(mean_5))*FFD_s_y+
-                           scale(n_fl)+(1|id),
-                         data = data_selag_subset1,family="binomial",na.action="na.fail")
-globmod_grazing_B<-glmer(cbind(grazing_success,grazing_failure)~
-                           scale(n_fl)+FFD_s_y*(scale(FFD_mean)+scale(FFD_sd))+(1|id),
-                         data = data_selag_subset1,family="binomial",na.action="na.fail")
-# Summary: failed to converge
-overdisp_fun(globmod_grazing_A)
-overdisp_fun(globmod_grazing_B)
+mod_grazing<-glmmTMB(cbind(grazing_success,grazing_failure)~
+                     scale(mean_3)+scale(mean_4)+scale(mean_5)+FFD_s_y+
+                     n_fl_s_y+(1|id),data = data_selag,
+                   family="binomial")
+summary(mod_grazing)
 ```
 
-Significant overdispersion
-
-### Rerun with beta binomial distribution in glmmTMB
-
-```{r message=FALSE, warning=FALSE}
-data_selag_subset1$id_factor<-as.factor(data_selag_subset1$id)
-globmod_grazing1_A<-glmmTMB(cbind(grazing_success,grazing_failure)~
-                            (scale(mean_3)+scale(mean_4)+scale(mean_5))*FFD_s_y+
-                           scale(n_fl)+(1|id_factor),
-                          data=data_selag_subset1,family=betabinomial,na.action="na.fail")
-globmod_grazing1_B<-glmmTMB(cbind(grazing_success,grazing_failure)~
-                            scale(n_fl)+FFD_s_y*(scale(FFD_mean)+scale(FFD_sd))+(1|id_factor),
-                          data=data_selag_subset1,family=betabinomial,na.action="na.fail")
-kable(summary(globmod_grazing1_A)$coefficients,digits=c(3,3,2,3))
-kable(summary(globmod_grazing1_B)$coefficients,digits=c(3,3,2,3))
-```
-
-#### Collinearity
-
-Check for collinearity with variance inflation factors:
-
-```{r}
-check_collinearity(globmod_grazing1_A) # OK, all below 2
-check_collinearity(globmod_grazing1_B) # OK, all below 2
-```
-
-
-#### Model diagnostics with DHARMa
-
-From: https://cran.r-project.org/web/packages/DHARMa/vignettes/DHARMa.html
-
-The ‘DHARMa’ package uses a simulation-based approach to create readily interpretable scaled (quantile) residuals for fitted (generalized) linear mixed models. 
-
-The ‘DHARMa’ package creates readily interpretable residuals for generalized linear (mixed) models that are standardized to values between 0 and 1, and that can be interpreted as intuitively as residuals for the linear model. This is achieved by a simulation-based approach, similar to the Bayesian p-value or the parametric bootstrap, that transforms the residuals to a standardized scale. The basic steps are:
-
-1. Simulate new data from the fitted model for each observation.
-
-2.  each observation, calculate the empirical cumulative density function for the simulated observations, which describes the possible values (and their probability) at the predictor combination of the observed value, assuming the fitted model is correct.
-
-3. The residual is then defined as the value of the empirical density function at the value of the observed data, so a residual of 0 means that all simulated values are larger than the observed value, and a residual of 0.5 means half of the simulated values are larger than the observed value.
-
-The key advantage of this definition is that the so-defined residuals always have the same, known distribution, independent of the model that is fit, if the model is correctly specified. To see this, note that, if the observed data was created from the same data-generating process that we simulate from, all values of the cumulative distribution should appear with equal probability. That means we expect the distribution of the residuals to be flat, regardless of the model structure (Poisson, binomial, random effects and so on).
-
-For a correctly specified model we would expect a uniform (flat) distribution of the overall residuals, and uniformity in y direction if we plot against any predictor.
+### Model diagnostics
 
 Simulate residuals of the model:
 
 ```{r}
-simulationOutput_globmod_grazing1_A <- 
-  simulateResiduals(fittedModel=globmod_grazing1_A,n=5000)
-simulationOutput_globmod_grazing1_B <-
-  simulateResiduals(fittedModel=globmod_grazing1_B,n=5000)
+sim_mod_grazing <- simulateResiduals(fittedModel=mod_grazing,n=5000)
 ```
 
 qq-plot  and plot of residuals vs. predicted:
 
 ```{r}
-plot(simulationOutput_globmod_grazing1_A)
-plot(simulationOutput_globmod_grazing1_B)
+plot(sim_mod_grazing,quantreg=T)
 ```
-
-Test of dispersion is significant --> what does this mean?
 
 ```{r}
-testDispersion(simulationOutput_globmod_grazing1_A)
-testDispersion(simulationOutput_globmod_grazing1_A,alternative="greater",plot=F) # Overdispersion
-testDispersion(simulationOutput_globmod_grazing1_A,alternative="less",plot=F) # Underdispersion
-testDispersion(simulationOutput_globmod_grazing1_B)
-testDispersion(simulationOutput_globmod_grazing1_B,alternative="greater",plot=F) 
-testDispersion(simulationOutput_globmod_grazing1_B,alternative="less",plot=F) 
+testDispersion(sim_mod_grazing)
 ```
 
-The test shows that there is underdispersion. However, according to https://stats.stackexchange.com/questions/396336/r-glmm-for-unbalanced-zero-inflated-data-glmmtmb, when fitting GLMMs with variable dispersion, zero-inflation often shows up as underdispersion, so the most reliable test is usually to run a model selection with ZIP against standard model.
-
-Zero inflation test is not significant:
+OK.
 
 ```{r}
-testZeroInflation(simulationOutput_globmod_grazing1_A)
-testZeroInflation(simulationOutput_globmod_grazing1_B)
+testZeroInflation(sim_mod_grazing)
 ```
 
-Plot the residuals against other predictors:
+Test of zero inflation is significant.
+
+### Try with betabinomial
 
 ```{r}
-par(mfrow=c(2,2))
-plotResiduals(simulationOutput_globmod_grazing1_A, scale(data_selag_subset1$mean_3))
-plotResiduals(simulationOutput_globmod_grazing1_A, scale(data_selag_subset1$mean_4))
-plotResiduals(simulationOutput_globmod_grazing1_A, scale(data_selag_subset1$mean_5))
-plotResiduals(simulationOutput_globmod_grazing1_A, scale(data_selag_subset1$n_fl))
-plotResiduals(simulationOutput_globmod_grazing1_A, scale(data_selag_subset1$FFD_s_y))
-plotResiduals(simulationOutput_globmod_grazing1_B, scale(data_selag_subset1$n_fl))
-plotResiduals(simulationOutput_globmod_grazing1_B, scale(data_selag_subset1$FFD_s_y))
-plotResiduals(simulationOutput_globmod_grazing1_B, scale(data_selag_subset1$FFD_mean))
-plotResiduals(simulationOutput_globmod_grazing1_B, scale(data_selag_subset1$FFD_sd))
+mod_grazing_bb<-glmmTMB(cbind(grazing_success,grazing_failure)~
+                       scale(mean_3)+scale(mean_4)+scale(mean_5)+FFD_s_y+
+                       n_fl_s_y+(1|id),data = data_selag,
+                     family="betabinomial")
+summary(mod_grazing_bb)
 ```
 
-Histogram of the residuals:
-
-```{r}
-hist(simulationOutput_globmod_grazing1_A)
-hist(simulationOutput_globmod_grazing1_B)
-```
-
-Seems OK, with no outliers.
-
-Goodness-of-fit tests on the simulated residuals:
-
-testUniformity() - tests if the overall distribution conforms to expectations
-testOutliers() - tests if there are more simulation outliers than expected
-testDispersion() - tests if the simulated dispersion is equal to the observed dispersion
-
-```{r}
-testResiduals(simulationOutput_globmod_grazing1_A)
-testResiduals(simulationOutput_globmod_grazing1_B)
-```
-
-The simulated dispersion is not equal to the observed dispersion.
-
-Using glmmTMB, we cannot perform model selection using dredge or use piecewiseSEM.
-
-## Proportion of predated seeds
-
-### Global models
-
-```{r message=FALSE, warning=FALSE}
-data_selag_subset2<-subset(subset(data_selag,n_seeds>0),!is.na(n_intact_seeds)&
-                             !is.na(n_fl)&!is.na(FFD))
-globmod_pred_GLM_A<-glm(cbind(round(n_pred_seeds),round(n_intact_seeds))~
-                        (scale(mean_3)+scale(mean_4)+scale(mean_5)+scale(mean_6))*FFD_s_y+
-                          scale(n_fl),data = data_selag_subset2,family="binomial",na.action="na.fail")
-globmod_pred_GLM_B<-glm(cbind(round(n_pred_seeds),round(n_intact_seeds))~
-                        scale(n_fl)+FFD_s_y*(scale(FFD_mean)+scale(FFD_sd)),
-                         data = data_selag_subset2,family="binomial",na.action="na.fail")
-overdisp_fun(globmod_pred_GLM_A)
-overdisp_fun(globmod_pred_GLM_B)
-```
-
-Significant overdispersion
-
-### Rerun with beta binomial distribution in glmmTBM
-
-```{r}
-globmod_pred_GLM1_A<-glmmTMB(cbind(round(n_pred_seeds),round(n_intact_seeds))~
-                             (scale(mean_3)+scale(mean_4)+scale(mean_5)+scale(mean_6))*FFD_s_y+
-                          scale(n_fl),
-                          data=data_selag_subset2,family=betabinomial,na.action="na.fail")
-globmod_pred_GLM1_B<-glmmTMB(cbind(round(n_pred_seeds),round(n_intact_seeds))~
-                             scale(n_fl)+FFD_s_y*(scale(FFD_mean)+scale(FFD_sd)),
-                           data=data_selag_subset2,family=betabinomial,na.action="na.fail")
-kable(summary(globmod_pred_GLM1_A)$coefficients,digits=c(3,3,2,3))
-kable(summary(globmod_pred_GLM1_B)$coefficients,digits=c(3,3,2,3))
-```
-
-#### Collinearity
-
-Check for collinearity with variance inflation factors:
-
-```{r}
-check_collinearity(globmod_pred_GLM1_A) # OK, all below 2
-check_collinearity(globmod_pred_GLM1_B) # OK, all below 2
-```
-
-#### Model diagnostics with DHARMa
+### Model diagnostics
 
 Simulate residuals of the model:
 
 ```{r}
-simulationOutput_globmod_pred_GLM1_A <- 
-  simulateResiduals(fittedModel = globmod_pred_GLM1_A, n = 5000)
-simulationOutput_globmod_pred_GLM1_B <- 
-  simulateResiduals(fittedModel = globmod_pred_GLM1_B, n = 5000)
+sim_mod_grazing_bb <- simulateResiduals(fittedModel=mod_grazing_bb,n=5000)
 ```
 
 qq-plot  and plot of residuals vs. predicted:
 
 ```{r}
-plot(simulationOutput_globmod_pred_GLM1_A)
-plot(simulationOutput_globmod_pred_GLM1_B)
-# Both are good!
+plot(sim_mod_grazing_bb,quantreg=T)
 ```
-
-There seems to be heteroscedasticity. According to https://cran.r-project.org/web/packages/DHARMa/vignettes/DHARMa.html, this means that there is a systematic dependency of the dispersion / variance on another variable in the model. It is not sufficiently appreciated that also binomial or Poisson models can show heteroscedasticity. Basically, it means that the level of over/underdispersion depends on another parameter. 
-
-Maybe we can live with this?
 
 ```{r}
-testDispersion(simulationOutput_globmod_pred_GLM1_A)
-testDispersion(simulationOutput_globmod_pred_GLM1_A,alternative="greater",
-               plot=F) # Overdispersion
-testDispersion(simulationOutput_globmod_pred_GLM1_A,alternative="less",
-               plot=F) # Underdispersion
-testDispersion(simulationOutput_globmod_pred_GLM1_B)
-testDispersion(simulationOutput_globmod_pred_GLM1_B,alternative="greater",
-               plot=F) # Overdispersion
-testDispersion(simulationOutput_globmod_pred_GLM1_B,alternative="less",
-               plot=F) # Underdispersion
+testDispersion(sim_mod_grazing_bb)
 ```
 
-Zero inflation test is significant:
+More underdispersion!
 
 ```{r}
-testZeroInflation(simulationOutput_globmod_pred_GLM1_A)
-testZeroInflation(simulationOutput_globmod_pred_GLM1_B)
+testZeroInflation(sim_mod_grazing_bb)
 ```
 
-There is a slight zero-inflation.
-
-Plot the residuals against other predictors:
+But zero inflation is fixed
 
 ```{r}
-par(mfrow=c(2,2))
-plotResiduals(simulationOutput_globmod_pred_GLM1_A, scale(data_selag_subset2$mean_3))
-plotResiduals(simulationOutput_globmod_pred_GLM1_A, scale(data_selag_subset2$mean_4))
-plotResiduals(simulationOutput_globmod_pred_GLM1_A, scale(data_selag_subset2$mean_5))
-plotResiduals(simulationOutput_globmod_pred_GLM1_A, scale(data_selag_subset2$mean_6))
-plotResiduals(simulationOutput_globmod_pred_GLM1_A, scale(data_selag_subset2$n_fl))
-plotResiduals(simulationOutput_globmod_pred_GLM1_A, scale(data_selag_subset2$FFD_s_y))
-plotResiduals(simulationOutput_globmod_pred_GLM1_B, scale(data_selag_subset2$n_fl))
-plotResiduals(simulationOutput_globmod_pred_GLM1_B, scale(data_selag_subset2$FFD_s_y))
-plotResiduals(simulationOutput_globmod_pred_GLM1_B, scale(data_selag_subset2$FFD_mean))
-plotResiduals(simulationOutput_globmod_pred_GLM1_B, scale(data_selag_subset2$FFD_sd))
+anova(mod_grazing,mod_grazing_bb)
+AIC(mod_grazing,mod_grazing_bb)
 ```
+Keep mod_grazing_bb.
 
-Histogram of the residuals:
-
-```{r}
-hist(simulationOutput_globmod_pred_GLM1_A)
-hist(simulationOutput_globmod_pred_GLM1_B)
-```
-
-Seems OK, with no outliers.
-
-Goodness-of-fit tests on the simulated residuals:
-
-testUniformity() - tests if the overall distribution conforms to expectations
-testOutliers() - tests if there are more simulation outliers than expected
-testDispersion() - tests if the simulated dispersion is equal to the observed dispersion
-
-```{r}
-testResiduals(simulationOutput_globmod_pred_GLM1_A)
-testResiduals(simulationOutput_globmod_pred_GLM1_B)
-```
-
-They seem OK.
-
-## Number of seeds per flower
-
-### Global model
+## Seed predation
 
 ```{r message=FALSE, warning=FALSE}
-data_selag_subset3<-subset(data_selag,!is.na(n_seeds_per_fl)&!is.na(FFD))
-globmod_seedsperfl_A<-glmmTMB(round(n_seeds_per_fl)~
-                                (scale(mean_3)+scale(mean_4)+scale(mean_5))*FFD_s_y+
-                                scale(n_fl)+scale(grazing_corr)+(1|id),
-                              data = data_selag_subset3,family="poisson",na.action="na.fail")
-globmod_seedsperfl_B<-glmmTMB(round(n_seeds_per_fl)~
-                              scale(n_fl)+FFD_s_y*(scale(FFD_mean)+scale(FFD_sd))+
-                              scale(grazing_corr)+(1|id),
-                         data = data_selag_subset3,family="poisson",na.action="na.fail")
-overdisp_fun(globmod_seedsperfl_A) # No overdispersion
-overdisp_fun(globmod_seedsperfl_B) # No overdispersion
-kable(summary(globmod_seedsperfl_A)$coefficients,digits=c(3,3,2,3))
-kable(summary(globmod_seedsperfl_B)$coefficients,digits=c(3,3,2,3))
+mod_seedpred<-glmmTMB(cbind(round(n_pred_seeds),round(n_intact_seeds))~
+                     scale(mean_3)+scale(mean_4)+scale(mean_5)+scale(mean_6)+
+                      FFD_s_y+n_fl_s_y+(1|id),data = data_selag,
+                    family="binomial")
+summary(mod_seedpred)
 ```
 
-#### Collinearity
-
-Check for collinearity with variance inflation factors:
-
-```{r}
-check_collinearity(globmod_seedsperfl_A) # OK, all below 2
-check_collinearity(globmod_seedsperfl_B) # OK, all below 2
-```
-
-#### Model diagnostics with DHARMa
+### Model diagnostics
 
 Simulate residuals of the model:
 
 ```{r}
-simulationOutput_globmod_seedsperfl_A <- 
-  simulateResiduals(fittedModel = globmod_seedsperfl_A, n = 5000)
-simulationOutput_globmod_seedsperfl_B <- 
-  simulateResiduals(fittedModel = globmod_seedsperfl_B, n = 5000)
+sim_mod_seedpred <- simulateResiduals(fittedModel=mod_seedpred,n=5000)
 ```
 
 qq-plot  and plot of residuals vs. predicted:
 
 ```{r}
-plot(simulationOutput_globmod_seedsperfl_A) # Good!
-plot(simulationOutput_globmod_seedsperfl_B) # Good!
+plot(sim_mod_seedpred,quantreg=T)
 ```
 
 ```{r}
-testDispersion(simulationOutput_globmod_seedsperfl_A)
-testDispersion(simulationOutput_globmod_seedsperfl_A,alternative="greater",
-               plot=F) # Overdispersion
-testDispersion(simulationOutput_globmod_seedsperfl_A,alternative="less",
-               plot=F) # Underdispersion
-testDispersion(simulationOutput_globmod_seedsperfl_B)
-testDispersion(simulationOutput_globmod_seedsperfl_B,alternative="greater",
-               plot=F) # Overdispersion
-testDispersion(simulationOutput_globmod_seedsperfl_B,alternative="less",
-               plot=F) # Underdispersion
+testDispersion(sim_mod_seedpred)
 ```
-
-Zero inflation test is not significant:
 
 ```{r}
-testZeroInflation(simulationOutput_globmod_seedsperfl_A)
-testZeroInflation(simulationOutput_globmod_seedsperfl_B)
+testZeroInflation(sim_mod_seedpred)
 ```
 
-Plot the residuals against other predictors:
+### Try with betabinomial
+
+```{r message=FALSE, warning=FALSE}
+mod_seedpred_bb<-glmmTMB(cbind(round(n_pred_seeds),round(n_intact_seeds))~
+                     scale(mean_3)+scale(mean_4)+scale(mean_5)+scale(mean_6)+
+                      FFD_s_y+n_fl_s_y+(1|id),data = data_selag,
+                    family="betabinomial")
+summary(mod_seedpred_bb)
+```
+
+### Model diagnostics
+
+Simulate residuals of the model:
 
 ```{r}
-par(mfrow=c(2,2))
-plotResiduals(simulationOutput_globmod_seedsperfl_A, scale(data_selag_subset3$mean_3))
-plotResiduals(simulationOutput_globmod_seedsperfl_A, scale(data_selag_subset3$mean_4))
-plotResiduals(simulationOutput_globmod_seedsperfl_A, scale(data_selag_subset3$mean_5))
-plotResiduals(simulationOutput_globmod_seedsperfl_A, scale(data_selag_subset3$n_fl))
-plotResiduals(simulationOutput_globmod_seedsperfl_A, data_selag_subset3$FFD_s_y)
-plotResiduals(simulationOutput_globmod_seedsperfl_A,
-              scale(data_selag_subset3$grazing_corr))
-plotResiduals(simulationOutput_globmod_seedsperfl_B, scale(data_selag_subset3$FFD_mean))
-plotResiduals(simulationOutput_globmod_seedsperfl_B, scale(data_selag_subset3$FFD_sd))
-plotResiduals(simulationOutput_globmod_seedsperfl_B, scale(data_selag_subset3$n_fl))
-plotResiduals(simulationOutput_globmod_seedsperfl_B, data_selag_subset3$FFD_s_y)
-plotResiduals(simulationOutput_globmod_seedsperfl_B,
-              scale(data_selag_subset3$grazing_corr))
+sim_mod_seedpred_bb <- simulateResiduals(fittedModel=mod_seedpred_bb,n=5000)
 ```
 
-Histogram of the residuals:
+qq-plot  and plot of residuals vs. predicted:
 
 ```{r}
-hist(simulationOutput_globmod_seedsperfl_A)
-hist(simulationOutput_globmod_seedsperfl_B)
+plot(sim_mod_seedpred_bb,quantreg=T)
 ```
-
-Goodness-of-fit tests on the simulated residuals:
-
-testUniformity() - tests if the overall distribution conforms to expectations
-testOutliers() - tests if there are more simulation outliers than expected
-testDispersion() - tests if the simulated dispersion is equal to the observed dispersion
 
 ```{r}
-testResiduals(simulationOutput_globmod_seedsperfl_A)
-testResiduals(simulationOutput_globmod_seedsperfl_B)
+testDispersion(sim_mod_seedpred_bb)
 ```
-
-## Graphs
-
-Fit models with all non-scaled variables, but keep FFD_s_y. When FFD_s_y is significant, effects are taken from models with temperatures (i.e. "A" models).
 
 ```{r}
-globmod_grazing1_A_ns<-glmmTMB(cbind(grazing_success,grazing_failure)~(mean_3+mean_4+mean_5)*FFD_s_y+
-                                 n_fl+(1|id_factor),data=data_selag_subset1,
-                               family=betabinomial,na.action="na.fail")
-globmod_grazing1_B_ns<-glmmTMB(cbind(grazing_success,grazing_failure)~n_fl+FFD_s_y*(FFD_mean+FFD_sd)+
-                              (1|id_factor),data=data_selag_subset1,
-                              family=betabinomial,na.action="na.fail")
-globmod_seedsperfl_A_ns<-glmmTMB(round(n_seeds_per_fl)~
-                                (mean_3+mean_4+mean_5)*FFD_s_y+n_fl+grazing_corr+(1|id),
-                              data = data_selag_subset3,family="poisson",na.action="na.fail")
-globmod_seedsperfl_B_ns<-glmmTMB(round(n_seeds_per_fl)~
-                              n_fl+FFD_s_y*(FFD_mean+FFD_sd)+grazing_corr+(1|id),
-                         data = data_selag_subset3,family="poisson",na.action="na.fail")
-globmod_pred_GLM1_A_ns<-glmmTMB(cbind(round(n_pred_seeds),round(n_intact_seeds))~
-                             (mean_3+mean_4+mean_5+mean_6)*FFD_s_y+n_fl,
-                           data=data_selag_subset2,family=betabinomial,na.action="na.fail")
-globmod_pred_GLM1_B_ns<-glmmTMB(cbind(round(n_pred_seeds),round(n_intact_seeds))~
-                             n_fl+FFD_s_y*(FFD_mean+FFD_sd),
-                           data=data_selag_subset2,family=betabinomial,na.action="na.fail")
+testZeroInflation(sim_mod_seedpred_bb)
 ```
 
-```{r echo=FALSE, fig.height=4, fig.width=12, message=FALSE, warning=FALSE}
-# Fig. 1: Temperatures
-
-fig1a<-grid.arrange(
-  # Grazing <- Temperature March
-ggpredict(globmod_grazing1_A_ns,terms = "mean_3 [all]")%>%
-  ggplot(aes(x,predicted))+geom_ribbon(aes(ymin=conf.low,ymax=conf.high),fill="grey")+
-  geom_line(color="black",size=1)+ggtitle("A) Grazing")+
-  my_theme()+xlab(NULL)+ylab(NULL)+
-  theme(plot.title=element_text(hjust=0,vjust=1))+
-  labs(subtitle = "March")+theme(plot.subtitle = element_text(hjust = 0.5,margin=margin(t=10,b=-20))),
-# Grazing <- Temperature April
-ggpredict(globmod_grazing1_A_ns,terms = "mean_4 [all]")%>%
-  ggplot(aes(x,predicted))+geom_ribbon(aes(ymin=conf.low,ymax=conf.high),fill="grey")+
-  geom_line(color="black",size=1)+ggtitle("blank")+
-  my_theme()+xlab(NULL)+ylab(NULL)+
-  theme(plot.title=element_text(hjust=0,vjust=1,color="white"))+
-  labs(subtitle = "April")+theme(plot.subtitle = element_text(hjust = 0.5,margin=margin(t=10,b=-20))),
-# Grazing <- Temperature May
-ggpredict(globmod_grazing1_A_ns,terms = "mean_5 [all]")%>%
-  ggplot(aes(x,predicted))+geom_ribbon(aes(ymin=conf.low,ymax=conf.high),fill="grey")+
-  geom_line(color="black",size=1)+ggtitle("blank")+
-  my_theme()+xlab(NULL)+ylab(NULL)+
-  theme(plot.title=element_text(hjust=0,vjust=1,color="white"))+
-  labs(subtitle = "May")+theme(plot.subtitle = element_text(hjust = 0.5,margin=margin(t=10,b=-20))),
-ncol=3)
-
-fig1b<-grid.arrange(
-# N seeds per fl <- Temperature May
-ggpredict(globmod_seedsperfl_A_ns,terms = "mean_5 [all]")%>%
-  ggplot(aes(x,predicted))+geom_ribbon(aes(ymin=conf.low,ymax=conf.high),fill="grey")+
-  geom_line(color="black",size=1)+ggtitle("B) Number of seeds per flower")+
-  my_theme()+xlab(NULL)+ylab(NULL)+
-  theme(plot.title=element_text(hjust=0,vjust=1))+
-  labs(subtitle = "May")+theme(plot.subtitle = element_text(hjust = 0.5,margin=margin(t=10,b=-20))),
-# Blank plot
-ggplot() + theme_void(),
-# Blank plot
-ggplot() + theme_void(),
-ncol=3)
-
-fig1c<-grid.arrange(
-# Predation <- Temperature March
-ggpredict(globmod_pred_GLM1_A_ns,terms = "mean_3 [all]")%>%
-  ggplot(aes(x,predicted))+geom_ribbon(aes(ymin=conf.low,ymax=conf.high),fill="grey")+
-  geom_line(color="black",size=1)+ggtitle("C) Seed predation")+
-  my_theme()+xlab(NULL)+ylab(NULL)+
-  theme(plot.title=element_text(hjust=0,vjust=1))+
-  labs(subtitle = "March")+theme(plot.subtitle = element_text(hjust = 0.5,margin=margin(t=10,b=-20))),
-# Predation <- Temperature May
-ggpredict(globmod_pred_GLM1_A_ns,terms = "mean_5 [all]")%>%
-  ggplot(aes(x,predicted))+geom_ribbon(aes(ymin=conf.low,ymax=conf.high),fill="grey")+
-  geom_line(color="black",size=1)+ggtitle("blank")+
-  my_theme()+xlab(NULL)+ylab(NULL)+
-  theme(plot.title=element_text(hjust=0,vjust=1,color="white"))+
-  labs(subtitle = "May")+theme(plot.subtitle = element_text(hjust = 0.5,margin=margin(t=10,b=-20))),
-# Predation <- Temperature June
-ggpredict(globmod_pred_GLM1_A_ns,terms = "mean_6 [all]")%>%
-  ggplot(aes(x,predicted))+geom_ribbon(aes(ymin=conf.low,ymax=conf.high),fill="grey")+
-  geom_line(color="black",size=1)+ggtitle("blank")+
-  my_theme()+xlab(NULL)+ylab(NULL)+
-  theme(plot.title=element_text(hjust=0,vjust=1,color="white"))+
-  labs(subtitle = "June")+theme(plot.subtitle = element_text(hjust = 0.5,margin=margin(t=10,b=-20))),
-ncol=3)
-
-fig1<-grid.arrange(fig1a,fig1b,fig1c,
-                   nrow=3,
-                   bottom=textGrob("Temperature (ºC)",
-                                   gp=gpar(fontsize=20,fontfamily="serif")),
-                   left=textGrob("Predicted interaction intensity",
-                                 just="center",hjust=0.48,
-                                 gp=gpar(fontsize=20,fontfamily="serif"),rot=90))
-plot(fig1)
-ggsave(filename=
-          "output/figures/Figure_1.tiff",
-        plot=fig1,device="tiff",width=30,height=27,units="cm",dpi=300,compression="lzw")
+```{r}
+anova(mod_seedpred,mod_seedpred_bb)
+AIC(mod_seedpred,mod_seedpred_bb)
 ```
 
-```{r echo=FALSE, fig.height=4, fig.width=12, message=FALSE, warning=FALSE}
-# Fig. 2: Mean and SD of FFD
-fig2<-grid.arrange(
-  # N seeds per fl <- SD FFD
-ggpredict(globmod_seedsperfl_B_ns,terms = "FFD_sd [all]")%>%
-  ggplot(aes(x,predicted))+geom_ribbon(aes(ymin=conf.low,ymax=conf.high),fill="grey")+
-  geom_line(color="black",size=1)+ggtitle("A)")+
-  my_theme()+xlab("Standard deviation of FFD")+
-  ylab("Predicted number of\nseeds per flower")+
-  theme(plot.title=element_text(hjust=-0.15,vjust=1)),
-# Predation <- Mean FFD
-ggpredict(globmod_pred_GLM1_B_ns,terms = "FFD_mean [all]")%>%
-  ggplot(aes(x,predicted))+geom_ribbon(aes(ymin=conf.low,ymax=conf.high),fill="grey")+
-  geom_line(color="black",size=1)+ggtitle("B)")+
-  my_theme()+xlab("Mean FFD")+ylab("Predicted seed predation")+
-  theme(plot.title=element_text(hjust=-0.15,vjust=1)),
-# Predation <- SD FFD
-ggpredict(globmod_pred_GLM1_B_ns,terms = "FFD_sd [all]")%>%
-  ggplot(aes(x,predicted))+geom_ribbon(aes(ymin=conf.low,ymax=conf.high),fill="grey")+
-  geom_line(color="black",size=1)+ggtitle("C)")+
-  my_theme()+xlab("Standard deviation of FFD")+ylab("Predicted seed predation")+
-  theme(plot.title=element_text(hjust=-0.15,vjust=1)),
-ncol=3)
-ggsave(filename=
-          "output/figures/Figure_2.tiff",
-        plot=fig2,device="tiff",width=30,height=9,units="cm",dpi=300,compression="lzw")
+Keep mod_seedpred_bb.
+
+## Table 1
+
+```{r message=FALSE, warning=FALSE}
+kable(summary(mod_grazing_bb)$coefficients,digits=c(3,3,2,3))
+kable(summary(mod_seedpred_bb)$coefficients,digits=c(3,3,2,3))
 ```
 
-```{r echo=FALSE, fig.height=4, fig.width=12, message=FALSE, warning=FALSE}
-# Fig. 3: Individual FFD
-fig3<-grid.arrange(
-  # Grazing <- Individual FFD
-ggpredict(globmod_grazing1_A_ns,terms = "FFD_s_y [all]")%>%
-  ggplot(aes(x,predicted))+geom_ribbon(aes(ymin=conf.low,ymax=conf.high),fill="grey")+
-  geom_line(color="black",size=1)+ggtitle("A)")+
-  my_theme()+xlab(NULL)+ylab("Predicted grazing")+
-  theme(plot.title=element_text(hjust=-0.15,vjust=1)),
-ggpredict(globmod_seedsperfl_A_ns,terms = "FFD_s_y [all]")%>%
-  ggplot(aes(x,predicted))+geom_ribbon(aes(ymin=conf.low,ymax=conf.high),fill="grey")+
-  geom_line(color="black",size=1)+ggtitle("B)")+
-  my_theme()+xlab(NULL)+ylab("Predicted number of\nseeds per flower")+
-  theme(plot.title=element_text(hjust=-0.15,vjust=1)),
-# Predation <- Temperature April * FFD
-ggpredict(globmod_pred_GLM1_A_ns,terms = c("FFD_s_y [all]","mean_4 [all]"))%>%
-  ggplot(aes(x,predicted, ymin = conf.low, ymax = conf.high, colour = group, fill = group))+
-  geom_line(aes(color=as.numeric(as.character(group))),size=0.6) + 
-  scale_colour_gradientn(colours = myPalette(100)) +
-  my_theme()+xlab(NULL)+ylab("Predicted seed predation")+
-  theme(plot.title=element_text(hjust=-0.15,vjust=1))+ggtitle("C)")+
-  theme(legend.justification=c(1.1,0.99),legend.position=c(1.1,0.99),
-        legend.direction="horizontal")+labs(colour="April temperature")+
-   guides(colour = guide_colourbar(title.position="top",title.hjust = 7,barheight=0.7))+
-  theme(legend.background = element_rect(fill=alpha('blue', 0))),
-ncol=3,bottom=textGrob("First flowering date",just="center",hjust=0.45,
-                       gp=gpar(fontsize=16,fontfamily="serif")))
-ggsave(filename=
-          "output/figures/Figure_3.tiff",
-        plot=fig3,device="tiff",width=30,height=9,units="cm",dpi=300,compression="lzw")
+## Graphs for Fig 2 - Part 1
+
+```{r message=FALSE, warning=FALSE}
+mod_grazing_bb_weights<-glmmTMB(grazing_corr~scale(mean_3)+scale(mean_4)+
+                                  scale(mean_5)+FFD_s_y+n_fl_s_y+(1|id),
+                                data = data_selag,weights=grazing_weights,
+                                family="betabinomial")
 ```
 
-# 3. How the three interactions affect fitness
+```{r}
+pred_grazing_mean3<-ggpredict(mod_grazing_bb_weights,
+                              terms = c("mean_3 [all]"))
+pred_grazing_mean4<-ggpredict(mod_grazing_bb_weights,
+                              terms = c("mean_4 [all]"))
+pred_grazing_mean5<-ggpredict(mod_grazing_bb_weights,
+                              terms = c("mean_5 [all]"))
+```
 
-## Phenotypic selection model
+```{r fig.height=4, fig.width=12, message=FALSE, warning=FALSE}
+Fig_2_temps_grazing<-grid.arrange(
+  ggplot(data_selag,aes(x=mean_3,y=grazing_corr))+
+    geom_point(size=3,alpha=0.05)+
+    geom_ribbon(data=pred_grazing_mean3,
+                aes(x,predicted,ymin=conf.low,ymax=conf.high),
+                fill="firebrick2",alpha=0.3)+
+    geom_line(data=pred_grazing_mean3,aes(x,predicted),
+              color="firebrick2",size=1)+
+    my_theme()+xlab("Mean March (ºC)")+ylab(NULL)+
+    theme(plot.margin = unit(c(0.3,0.1,0.3,0.1), "cm"))+
+    theme(axis.text.y=element_blank()),
+  ggplot(data_selag,aes(x=mean_4,y=grazing_corr))+
+    geom_point(size=3,alpha=0.05)+
+    geom_ribbon(data=pred_grazing_mean4,
+                aes(x,predicted,ymin=conf.low,ymax=conf.high),
+                fill="firebrick2",alpha=0.3)+
+    geom_line(data=pred_grazing_mean4,aes(x,predicted),
+              color="firebrick2",size=1)+
+    my_theme()+xlab("Mean April (ºC)")+ylab(NULL)+
+    theme(plot.margin = unit(c(0.3,0.1,0.3,0.1), "cm"))+
+    theme(axis.text.y=element_blank()),
+  ggplot(data_selag,aes(x=mean_5,y=grazing_corr))+
+    geom_point(size=3,alpha=0.05)+
+    geom_ribbon(data=pred_grazing_mean5,
+                aes(x,predicted,ymin=conf.low,ymax=conf.high),
+                fill="firebrick2",alpha=0.3)+
+    geom_line(data=pred_grazing_mean5,aes(x,predicted),
+              color="firebrick2",size=1)+
+    my_theme()+xlab("Mean May (ºC)")+ylab(NULL)+
+    theme(plot.margin = unit(c(0.3,0.1,0.3,0.1), "cm"))+
+    theme(axis.text.y=element_blank()),
+  ncol=3)
+ggsave(filename="output/figures/Fig_2_temps_grazing.tiff",
+       plot=Fig_2_temps_grazing,device="tiff",width=15,height=10,units="cm",
+       dpi=300,compression="lzw")
+```
 
-Because grazing influences (decreases) the number of seeds per flower, we calculate residuals of number of seeds per flower on grazing to use in the model.
+```{r message=FALSE, warning=FALSE}
+data_selag$n_seeds_rounded<-round(data_selag$n_seeds)
+mod_seedpred_bb_weights<-glmmTMB(prop_pred_seeds~scale(mean_3)+scale(mean_4)+
+                                   scale(mean_5)+scale(mean_6)+FFD_s_y+n_fl_s_y+
+                                   (1|id),data = data_selag,
+                                 family="betabinomial",weights=n_seeds_rounded)
+```
 
+```{r}
+pred_seedpred_mean3<-ggpredict(mod_seedpred_bb_weights,
+                              terms = c("mean_3 [all]"))
+pred_seedpred_mean5<-ggpredict(mod_seedpred_bb_weights,
+                              terms = c("mean_5 [all]"))
+pred_seedpred_mean6<-ggpredict(mod_seedpred_bb_weights,
+                              terms = c("mean_6 [all]"))
+```
 
-### Classic selection model (Gaussian)
+```{r fig.height=4, fig.width=12, message=FALSE, warning=FALSE}
+Fig_2_temps_seedpred<-grid.arrange(
+  ggplot(data_selag,aes(x=mean_3,y=prop_pred_seeds))+
+    geom_point(size=3,alpha=0.05)+
+    geom_ribbon(data=pred_seedpred_mean3,
+                aes(x,predicted,ymin=conf.low,ymax=conf.high),
+                fill="firebrick2",alpha=0.3)+
+    geom_line(data=pred_seedpred_mean3,aes(x,predicted),
+              color="firebrick2",size=1)+
+    my_theme()+xlab("Mean March (ºC)")+ylab(NULL)+
+    theme(plot.margin = unit(c(0.3,0.1,0.3,0.1), "cm"))+
+    theme(axis.text.y=element_blank()),
+  ggplot(data_selag,aes(x=mean_5,y=prop_pred_seeds))+
+    geom_point(size=3,alpha=0.05)+
+    geom_ribbon(data=pred_seedpred_mean5,
+                aes(x,predicted,ymin=conf.low,ymax=conf.high),
+                fill="firebrick2",alpha=0.3)+
+    geom_line(data=pred_seedpred_mean5,aes(x,predicted),
+              color="firebrick2",size=1)+
+    my_theme()+xlab("Mean May (ºC)")+ylab(NULL)+
+    theme(plot.margin = unit(c(0.3,0.1,0.3,0.1), "cm"))+
+    theme(axis.text.y=element_blank()),
+  ggplot(data_selag,aes(x=mean_6,y=prop_pred_seeds))+
+    geom_point(size=3,alpha=0.05)+
+    geom_ribbon(data=pred_seedpred_mean6,
+                aes(x,predicted,ymin=conf.low,ymax=conf.high),
+                fill="firebrick2",alpha=0.3)+
+    geom_line(data=pred_seedpred_mean6,aes(x,predicted),
+              color="firebrick2",size=1)+
+    my_theme()+xlab("Mean June (ºC)")+ylab(NULL)+
+    theme(plot.margin = unit(c(0.3,0.1,0.3,0.1), "cm"))+
+    theme(axis.text.y=element_blank()),
+  ncol=3)
+ggsave(filename="output/figures/Fig_2_temps_seedpred.tiff",
+       plot=Fig_2_temps_seedpred,device="tiff",width=15,height=10,units="cm",
+       dpi=300,compression="lzw")
+```
 
-In this model, we use: fitness relativized within years, FFD and n_fl standardized within years,interactions standardized accross years. Main effects of interactions are not included because fitness was relativized within years. 
+# H3 - Part 2
+
+Differences in the intensity of biotic interactions among years cause differences in selection on flowering time. 
+
+In this phenotypic selection model, we use: fitness relativized within years, FFD and n_fl standardized within years,interactions standardized accross years. Main effects of interactions are not included because fitness was relativized within years. 
 
 N = 2376
 
-```{r}
-data_selag$n_seeds_per_fl_res<-with(data_selag,ifelse(is.na(n_seeds_per_fl),NA,
-                                           residuals(lm(n_seeds_per_fl~grazing_corr,
-                                               data=data_selag))))
+```{r message=FALSE, warning=FALSE}
+# Add yearly mean values of biotic interaction to dataset 
 data_selag_means<-data_selag%>%
   group_by(year)%>%
-  dplyr::summarise(n_seeds_per_fl_mean=mean(n_seeds_per_fl,na.rm=T),
-                   n_seeds_per_fl_res_mean=mean(n_seeds_per_fl_res,na.rm=T),
-                   grazing_mean=mean(grazing_corr,na.rm=T),
-                   prop_pred_seeds_mean=mean(prop_pred_seeds,na.rm=T),
-                   n_fl_mean=mean(n_fl,na.rm=T),
-                   n_fl_sd=sd(n_fl,na.rm=T),
-                   n_intact_seeds_mean=mean(n_intact_seeds,na.rm=T))
-
+  dplyr::summarise(grazing_mean=mean(grazing_corr,na.rm=T),
+                   prop_pred_seeds_mean=mean(prop_pred_seeds,na.rm=T))
 data_selag<-data_selag%>%left_join(data_selag_means,by="year")
-# Standardize interactions accross years
-data_selag$n_seeds_per_fl_mean_s<-scale(data_selag$n_seeds_per_fl_mean)
-data_selag$n_seeds_per_fl_res_mean_s<-scale(data_selag$n_seeds_per_fl_res_mean)
-data_selag$grazing_mean_s<-scale(data_selag$grazing_mean)
-data_selag$prop_pred_seeds_mean_s<-scale(data_selag$prop_pred_seeds_mean)
-
-# Relativize fitness within years and standardize FFD and n_fl within years
-data_selag$n_intact_seeds_rel_y<-with(data_selag,n_intact_seeds/n_intact_seeds_mean)
-data_selag$FFD_s_y<-with(data_selag,(FFD-FFD_mean)/FFD_sd)
-data_selag$n_fl_s_y<-with(data_selag,(n_fl-n_fl_mean)/n_fl_sd)
 ```
 
 ```{r}
-mod_int_sel_GLMM<-glmmTMB(n_intact_seeds_rel_y ~ FFD_s_y+n_fl_s_y+
-                         FFD_s_y:n_seeds_per_fl_res_mean_s+
-                         FFD_s_y:grazing_mean_s+
-                         FFD_s_y:prop_pred_seeds_mean_s+
+mod_int_sel_GLMM<-glmmTMB(fitness_rel_y ~ FFD_s_y+n_fl_s_y+
+                         FFD_s_y:scale(grazing_mean)+
+                         FFD_s_y:scale(prop_pred_seeds_mean)+
                          (1|id),data_selag,family="gaussian")
-mod_int_sel_GLMM<-lmer(n_intact_seeds_rel_y ~ FFD_s_y+n_fl_s_y+
-                         FFD_s_y:n_seeds_per_fl_res_mean_s+
-                         FFD_s_y:grazing_mean_s+
-                         FFD_s_y:prop_pred_seeds_mean_s+
+mod_int_sel_GLMM<-lmer(fitness_rel_y ~ FFD_s_y+n_fl_s_y+
+                         FFD_s_y:scale(grazing_mean)+
+                         FFD_s_y:scale(prop_pred_seeds_mean)+
                          (1|id),data_selag)
-mod_int_sel_LM<-lm(n_intact_seeds_rel_y ~ FFD_s_y+n_fl_s_y+
-                         FFD_s_y:n_seeds_per_fl_res_mean_s+
-                         FFD_s_y:grazing_mean_s+
-                         FFD_s_y:prop_pred_seeds_mean_s,
-                   subset(data_selag,!is.na(n_intact_seeds_rel_y)&!is.na(FFD_s_y)&!is.na(n_fl_s_y)&
-                            !is.na(n_seeds_per_fl_res_mean_s)&!is.na(grazing_mean_s)&
-                            !is.na(prop_pred_seeds_mean_s)))
+mod_int_sel_LM<-lm(fitness_rel_y ~ FFD_s_y+n_fl_s_y+
+                         FFD_s_y:scale(grazing_mean)+
+                         FFD_s_y:scale(prop_pred_seeds_mean),
+                   subset(data_selag,!is.na(fitness_rel_y)&
+                            !is.na(FFD_s_y)&!is.na(n_fl_s_y)&
+                            !is.na(grazing_mean)&
+                            !is.na(prop_pred_seeds_mean)))
 # Results of models (t-tests)
-kable(summary(mod_int_sel_GLMM)$coefficients,digits=c(3,3,1,2,3))
+kable(summary(mod_int_sel_GLMM)$coefficients,digits=c(3,3,0,2,3))
 # Analysis of deviance (Wald chi‐square tests for GLMM)
-kable(Anova(mod_int_sel_GLMM))
+kable(Anova(mod_int_sel_GLMM),digits=c(2,1,3))
 ```
 
 Significant effect of grazing on selection (but we have seen that the significance is driven by the year 2017).
 
-#### Model diagnostics with DHARMa
+## Model diagnostics
 
 Simulate residuals of the model:
 
@@ -1333,36 +816,23 @@ qq-plot  and plot of residuals vs. predicted:
 plot(simulationOutput_mod_int_sel_GLMM)
 ```
 
-```{r}
-testDispersion(simulationOutput_mod_int_sel_GLMM)
-```
+Looking bad, calculate bootstrapped CIs.
 
-```{r}
-testZeroInflation(simulationOutput_mod_int_sel_GLMM)
-```
+## Bootstraped confidence intervals
 
-```{r}
-hist(simulationOutput_mod_int_sel_GLMM)
-```
-
-```{r}
-testResiduals(simulationOutput_mod_int_sel_GLMM)
-```
-
-#### Bootstraped confidence intervals
-
-##### Mixed model
+### Mixed model
 
 ```{r}
 b_par<-bootMer(x=mod_int_sel_GLMM,FUN=fixef,nsim=10000)
 ```
 
-
 ```{r}
 confint(b_par,level=0.95, method="boot") # Percentile method
 ```
 
-##### LM (Elsa's code)
+Similar to significances in the model
+
+### LM (Elsa's code)
 
 ```{r}
 # FFD_s_y
@@ -1383,17 +853,8 @@ rm(slp, b, b1)
 ```
 
 ```{r}
-# FFD_s_y:n_seeds_per_fl_res_mean_s
-slp <- function(mod_int_sel_LM) coef(mod_int_sel_LM)[4]
-b <- car::Boot(mod_int_sel_LM,slp, R=10000) # note the capital B
-b1 <- boot::boot.ci(b,type="bca")
-FFD_s_y_seedl_ci <- as.data.frame(b1$bca[1,4:5])
-rm(slp, b, b1)
-```
-
-```{r}
 # FFD_s_y:grazing_mean_s
-slp <- function(mod_int_sel_LM) coef(mod_int_sel_LM)[5]
+slp <- function(mod_int_sel_LM) coef(mod_int_sel_LM)[4]
 b <- car::Boot(mod_int_sel_LM,slp, R=10000) # note the capital B
 b1 <- boot::boot.ci(b,type="bca")
 FFD_s_y_graz_ci <- as.data.frame(b1$bca[1,4:5])
@@ -1402,7 +863,7 @@ rm(slp, b, b1)
 
 ```{r}
 # prop_pred_seeds_mean_s
-slp <- function(mod_int_sel_LM) coef(mod_int_sel_LM)[6]
+slp <- function(mod_int_sel_LM) coef(mod_int_sel_LM)[5]
 b <- car::Boot(mod_int_sel_LM,slp, R=10000) # note the capital B
 b1 <- boot::boot.ci(b,type="bca")
 FFD_s_y_pred_ci <- as.data.frame(b1$bca[1,4:5])
@@ -1412,106 +873,63 @@ rm(slp, b, b1)
 ```{r}
 # Save confidence intervals as a table
 lower_A <- rbind(FFD_s_y_ci[1,] ,n_fl_s_y_ci[1,])
-lower_B <- rbind(lower_A ,FFD_s_y_seedl_ci[1,])
-lower_C <- rbind(lower_B ,FFD_s_y_graz_ci[1,])
-lower_D <- rbind(lower_C ,FFD_s_y_pred_ci[1,])
-lower <- lower_D
+lower_B <- rbind(lower_A ,FFD_s_y_graz_ci[1,])
+lower_C <- rbind(lower_B ,FFD_s_y_pred_ci[1,])
+lower <- lower_C
 
 upper_A <- rbind(FFD_s_y_ci[2,] ,n_fl_s_y_ci[2,])
-upper_B <- rbind(upper_A ,FFD_s_y_seedl_ci[2,])
-upper_C <- rbind(upper_B ,FFD_s_y_graz_ci[2,])
-upper_D <- rbind(upper_C ,FFD_s_y_pred_ci[2,])
-upper <- upper_D
-
+upper_B <- rbind(upper_A ,FFD_s_y_graz_ci[2,])
+upper_C <- rbind(upper_B ,FFD_s_y_pred_ci[2,])
+upper <- upper_C
 
 BCIs_mod_int_sel_LM <- cbind(lower, upper) 
-rownames(BCIs_mod_int_sel_LM) <- c("FFD_s_y","n_fl_s_y","FFD_s_y:seedfl",
+rownames(BCIs_mod_int_sel_LM) <- c("FFD_s_y","n_fl_s_y",
                                    "FFD_s_y:graz","FFD_s_y:pred")
+BCIs_mod_int_sel_LM
 ```
 
-### Negative binomial distribution with offset
+Similar to significances in the model
 
-```{r message=TRUE}
-mod_int_sel_GLMM2<-glmmTMB(round(n_intact_seeds) ~ FFD_s_y+n_fl_s_y+
-                  FFD_s_y:n_seeds_per_fl_res_mean_s+
-                  FFD_s_y:grazing_mean_s+
-                  FFD_s_y:prop_pred_seeds_mean_s+
-                  (1|id),data_selag,family="nbinom2",offset=n_intact_seeds_mean)
-# Results of models (t-tests)
-kable(summary(mod_int_sel_GLMM2)$coefficients,digits=c(3,3,2,3))
-# Analysis of deviance (Wald chi‐square tests for GLMM)
-kable(Anova(mod_int_sel_GLMM2))
+## Graph for Fig 2 - Part 2
+
+```{r}
+pred_fitness<-ggpredict(mod_int_sel_GLMM,
+                        terms = c("FFD_s_y [all]","grazing_mean [0:0.8 by=.05]"))
 ```
 
-
-### Graphs of the interaction FFD:grazing 
-
-Graph based on GLMMs with non-standardized interactions - to show real values of grazing in the color bar.
-
-```{r echo=FALSE, fig.height=5, fig.width=6, message=FALSE, warning=FALSE}
-mod_int_sel_GLMM_nsints<-glmmTMB(n_intact_seeds_rel_y ~ FFD_s_y+n_fl_s_y+
-               FFD_s_y:n_seeds_per_fl_res_mean+FFD_s_y:grazing_mean+FFD_s_y:prop_pred_seeds_mean+
-                 (1|id),data_selag,family="gaussian")
-
-ggpredict(mod_int_sel_GLMM_nsints,terms = c("FFD_s_y [all]","grazing_mean [0:0.8 by=.1]"))%>%
-  ggplot(aes(x,predicted,colour=group,fill=group))+
+```{r fig.height=4, fig.width=6}
+Fig_2_fitness<-ggplot(pred_fitness,aes(x,predicted,colour=group,fill=group))+
   geom_line(aes(color=as.numeric(as.character(group))),size=0.6)+my_theme()+
-  scale_colour_gradientn(colours = myPalette(100)) +
-  theme(legend.position="right")+labs(colour="Grazing")+
-  xlab("First flowering date")+ylab("Predicted number of intact seeds")
-ggsave(filename=
-          "output/figures/Figure_4.tiff",
-        device="tiff",width=12,height=9,units="cm",dpi=300,compression="lzw")
+  scale_color_viridis(direction = -1)+
+  theme(legend.position="top")+labs(colour="Yearly\nmean grazing  ")+
+  xlab("First flowering date")+ylab("Predicted fitness")
+Fig_2_fitness
+ggsave(filename="output/figures/Fig_2_fitness.tiff",
+       plot=Fig_2_fitness,device="tiff",width=9,height=10,units="cm",
+       dpi=300,compression="lzw")
 ```
 
 The slope of the relationship among fitness and FFD is more positive in years with higher proportions of grazing → selection for later flowering in those years
 
-```{r echo=FALSE, fig.height=5, fig.width=12, message=FALSE, warning=FALSE}
-mod_int_sel_GLMM_nsints2<-glmmTMB(round(n_intact_seeds) ~ FFD_s_y+n_fl_s_y+
-                  FFD_s_y:n_seeds_per_fl_res_mean+FFD_s_y:grazing_mean+FFD_s_y:prop_pred_seeds_mean+
-                  offset(n_intact_seeds_mean)+(1|id),data_selag,family="nbinom2")
-fig4<-grid.arrange(
-ggpredict(mod_int_sel_GLMM_nsints2,terms = c("FFD_s_y [all]","grazing_mean [quart]"))%>%
-  ggplot(aes(x,predicted,colour=group,fill=group))+
-  geom_line(aes(color=group),size=1)+my_theme()+ggtitle("A)")+
-  theme(legend.justification=c(0.95,0.95),legend.position=c(0.95,0.95))+labs(colour="Grazing")+
-  scale_color_manual(values=c("#d7191c","#fdae61","#ffffbf","#abdda4","#2b83ba"))+
-  xlab("FFD (standardized within years)")+ylab(NULL),
-ggpredict(mod_int_sel_GLMM_nsints2,terms = c("FFD_s_y [all]","prop_pred_seeds_mean [quart]"))%>%
-  ggplot(aes(x,predicted,colour=group,fill=group))+
-  geom_line(aes(color=group),size=1)+my_theme()+ggtitle("B)")+
-  theme(legend.justification=c(0.95,0.95),legend.position=c(0.95,0.95))+labs(colour="Seed\npredation")+
-  scale_color_manual(values=c("#d7191c","#fdae61","#ffffbf","#abdda4","#2b83ba"))+
-  xlab("FFD (standardized within years)")+ylab(NULL),
-ncol=2,left=textGrob("Predicted number of intact seeds",just="center",hjust=0.50,
-                     gp=gpar(fontsize=16,fontfamily="serif"),rot = 90))
-ggsave(filename=
-          "output/figures/Figure_4_OLD.tiff",
-        plot=fig4,device="tiff",width=260,height=120,units="mm",dpi=100,compression="lzw")
-```
-
-
-### Effects on selection gradients for each year
+## Effects on selection gradients for each year (not used)
 
 Calculation of selection gradients for each year
 
 ```{r}
 selgrads_FFD<-data.frame(data_selag %>% group_by(year) %>% 
-  do(model = lm(n_intact_seeds_rel_y ~ FFD_s_y+n_fl_s_y, data = .)) %>% tidy(model))
+  do(tidy(lm(fitness_rel_y ~ FFD_s_y+n_fl_s_y, data = .))))
 selgrads_FFD$sig<-ifelse(selgrads_FFD$p.value<0.05,"*","") 
-kable(subset(selgrads_FFD,term=="FFD_s_y"),digits=3)  #Linear selection gradients for FFD
-#FFD * (selection for early flowering) in 1991,1992,1993,1994,2007,2010,2012,2014 (as in EL paper)
+kable(subset(selgrads_FFD,term=="FFD_s_y"),
+      digits=3)  #Linear selection gradients for FFD
+#FFD * (selection for early flowering) 
+# in 1991,1992,1993,1994,2007,2010,2012,2014 (as in EL paper)
 ```
-
 Plot selection gradients vs mean interactions
 
 ```{r echo=FALSE, fig.height=5, fig.width=18}
 data_selag_means<-data_selag_means%>%
   left_join(subset(selgrads_FFD,term=="FFD_s_y")[c(1,3)])
 grid.arrange(
-  ggplot(data_selag_means,aes(x=n_seeds_per_fl_res_mean,y=estimate))+my_theme()+
-  geom_point()+geom_smooth(method="lm")+ylab("Selection gradient for FFD")+
-  xlab("Mean number of seeds per flower (residuals)"),
   ggplot(data_selag_means,aes(x=grazing_mean,y=estimate))+my_theme()+
   geom_point()+geom_smooth(method="lm")+ylab("Selection gradient for FFD")+
   xlab("Mean grazing"),
@@ -1524,127 +942,34 @@ grid.arrange(
 Models for effects of mean interactions on selection gradients
 
 ```{r}
-kable(summary(lm(estimate~n_seeds_per_fl_res_mean,data_selag_means))$coefficients)
 kable(summary(lm(estimate~grazing_mean,data_selag_means))$coefficients)
 kable(summary(lm(estimate~prop_pred_seeds_mean,data_selag_means))$coefficients)
-kable(summary(lm(estimate~n_seeds_per_fl_res_mean+grazing_mean+prop_pred_seeds_mean,
+kable(summary(lm(estimate~grazing_mean+prop_pred_seeds_mean,
                  data_selag_means))$coefficients)
-kable(summary(lm(estimate~n_seeds_per_fl_res_mean+grazing_mean+prop_pred_seeds_mean,
+kable(summary(lm(estimate~grazing_mean+prop_pred_seeds_mean,
                  subset(data_selag_means,year<2017)))$coefficients)
 ```
 
 No significant effects of yearly mean interactions on yearly selection gradients (but effect of grazing is ALMOST significant)
 
-## Models of fitness vs. the three interactions 
-
-```{r message=FALSE, warning=FALSE}
-data_selag_subset4<-subset(data_selag,!is.na(n_intact_seeds)&!is.na(n_seeds_per_fl)&
-                             !is.na(grazing_corr)&!is.na(n_fl)&!is.na(FFD_s_y))
-data_selag_subset4$n_intact_seeds_pres<-with(data_selag_subset4,
-                                             ifelse(is.na(n_intact_seeds),NA,
-                                                    ifelse(n_intact_seeds>0,1,0)))
-
-model_fitness_pres<-glmmTMB(n_intact_seeds_pres~scale(grazing_corr)+scale(n_seeds_per_fl)+
-                              scale(n_fl)+FFD_s_y+(1|year)+ 
-                              # Added random effect of year as suggested by Elsa
-                              (1|id),data_selag_subset4,family="binomial") # Very small variance of id if including it as a random effect --> but include it still
-# Coefs were very similar to those in GLM
-
-model_fitness_count<-glmmTMB(round(n_intact_seeds)~scale(n_seeds_per_fl)+
-                               scale(grazing_corr)+scale(prop_pred_seeds)+scale(n_fl)+
-                               FFD_s_y+(1|year),
-                             # Added random effect of year as suggested by Elsa
-                             subset(data_selag_subset4,n_seeds>0),family="nbinom2")
-# Not adding id as random effects because most ids with only one observation
-
-nobs(model_fitness_pres) # All plants
-nobs(model_fitness_count) # Plants with > 0 seeds
-
-kable(summary(model_fitness_pres)$coefficients)
-kable(summary(model_fitness_count)$coefficients)
-```
-
-#### Model diagnostics with DHARMa
-
-Simulate residuals of the model:
-
-```{r}
-# simulationOutput_model_fitness_pres <- 
-#     simulateResiduals(fittedModel = model_fitness_pres, n = 5000) # Error
-simulationOutput_model_fitness_count <- 
-   simulateResiduals(fittedModel = model_fitness_count, n = 5000) 
-```
-
-qq-plot  and plot of residuals vs. predicted:
-
-```{r}
-plot(simulationOutput_model_fitness_count)
-testResiduals(simulationOutput_model_fitness_count)
-```
-
-#### Graphs
-
-```{r echo=FALSE, fig.height=4, fig.width=5, message=FALSE, warning=FALSE}
-ggplot(data_selag_subset4,aes(x=grazing,y=n_intact_seeds_pres))+geom_point()+
-  geom_smooth(method="glm",method.args = list(family = "binomial"),color="black")+my_theme()+
-  xlab("Grazing")+ylab("Probability of producing intact seeds")
-
-# Predicted probabilities from model with scaled vars
-ggpredict(model_fitness_pres,terms = "grazing_corr [all]")%>%
-  ggplot(aes(x,predicted))+geom_ribbon(aes(ymin=conf.low,ymax=conf.high),fill="grey")+
-  geom_line(color="black",size=1)+
-  my_theme()+xlab("Grazing")+ylab("Predicted probability of producing seeds")
-
-# Predicted probabilities from model with non-scaled vars
-ggpredict(glmmTMB(n_intact_seeds_pres~grazing_corr+n_seeds_per_fl+
-                    n_fl+FFD_s_y+(1|id),data_selag_subset4,family="binomial"),
-          terms = "grazing_corr [all]")%>%
-  ggplot(aes(x,predicted))+geom_ribbon(aes(ymin=conf.low,ymax=conf.high),fill="grey")+
-  geom_line(color="black",size=1)+
-  my_theme()+xlab("Grazing")+ylab("Predicted probability of producing seeds")
-
-ggplot(data_selag_subset4,aes(x=n_seeds_per_fl,y=n_intact_seeds_pres))+geom_point()+
-  geom_smooth(method="glm",method.args = list(family = "binomial"),color="black")+my_theme()+
-  xlab("Number of seeds per flower")+ylab("Probability of producing intact seeds")
-
-ggplot(data_selag_subset4,aes(x=n_seeds_per_fl,y=n_intact_seeds))+geom_point()+
-  my_theme()+
-  xlab("Number of seeds per flower")+ylab("Number of intact seeds")
-
-ggplot(data_selag_subset4,aes(x=prop_pred_seeds,y=n_intact_seeds))+geom_point()+
-  my_theme()+
-  xlab("Proportion of predated seeds")+ylab("Number of intact seeds")
-```
-
-# Different grazing estimates
-
-```{r message=FALSE, warning=FALSE}
-data_selag$grazing_type<-with(data_selag,ifelse(year<1997|year>2015,"flowers",
-                                                ifelse(year==2006,"shoots","volume")))
-summary(lm(n_seeds_per_fl~grazing_corr*grazing_type,data_selag))
-Anova(lm(n_seeds_per_fl~grazing_corr*grazing_type,data_selag))
-summary(glm(n_seeds_per_fl~grazing_corr*grazing_type,data_selag,family=poisson))
-Anova(glm(n_seeds_per_fl~grazing_corr*grazing_type,data_selag,family=poisson))
-```
-
-# Variation FFD mean, FFD SD, climatic Variables, and intensities of the three interactions among years.
+# Appendix S1: Variation FFD, climatic Variables and intensities of the three interactions among years.
 
 ## Values
 
 ```{r}
-# FFD mean and SD
-data_selag%>%
-  dplyr::group_by(year)%>%
-  dplyr::summarise(FFD_mean=mean(FFD,na.rm=T),
-                   FFD_SD=sd(FFD,na.rm=T))%>%
-  dplyr::summarise(FFD_mean_min=min(FFD_mean),
-                   FFD_mean_max=max(FFD_mean),
-                   FFD_mean_mean=mean(FFD_mean),
-                   FFD_mean_sd=sd(FFD_mean),
-                   FFD_SD_min=min(FFD_SD),
-                   FFD_SD_max=max(FFD_SD),
-                   FFD_SD_mean=mean(FFD_SD),
-                   FFD_SD_sd=sd(FFD_SD))
+# # FFD mean and SD
+# data_selag%>%
+#   dplyr::group_by(year)%>%
+#   dplyr::summarise(FFD_mean=mean(FFD,na.rm=T),
+#                    FFD_SD=sd(FFD,na.rm=T))%>%
+#   dplyr::summarise(FFD_mean_min=min(FFD_mean),
+#                    FFD_mean_max=max(FFD_mean),
+#                    FFD_mean_mean=mean(FFD_mean),
+#                    FFD_mean_sd=sd(FFD_mean),
+#                    FFD_SD_min=min(FFD_SD),
+#                    FFD_SD_max=max(FFD_SD),
+#                    FFD_SD_mean=mean(FFD_SD),
+#                    FFD_SD_sd=sd(FFD_SD))
 
 # Temperatures
 range(unique(data_selag$mean_3))
@@ -1666,10 +991,6 @@ data_selag_means%>%
                    grazing_mean_max=max(grazing_mean),
                    grazing_mean_mean=mean(grazing_mean),
                    grazing_mean_sd=sd(grazing_mean),
-                   n_seeds_per_fl_mean_min=min(n_seeds_per_fl_mean),
-                   n_seeds_per_fl_mean_max=max(n_seeds_per_fl_mean),
-                   n_seeds_per_fl_mean_mean=mean(n_seeds_per_fl_mean),
-                   n_seeds_per_fl_mean_sd=sd(n_seeds_per_fl_mean),
                    prop_pred_seeds_mean_min=min(prop_pred_seeds_mean),
                    prop_pred_seeds_mean_max=max(prop_pred_seeds_mean),
                    prop_pred_seeds_mean_mean=mean(prop_pred_seeds_mean),
@@ -1677,6 +998,8 @@ data_selag_means%>%
 ```
 
 ## Plots
+
+Variation in number of plants flowering and producing seeds, flowering time, temperatures and interaction intensities during the study period. 
 
 Read weather data
 
@@ -1686,15 +1009,42 @@ weather<-read.table("data/weather.csv",
 weather<-subset(subset(weather,year!=1995),year<1997|year>2005)
 ```
 
+### Fig. S1
+
 ```{r fig.height=4, fig.width=12}
-# FFD mean and SD
+# How many plants flowered each year, and how many produced seeds
+data_selag%>%
+  filter(!is.na(FFD)|!is.na(n_fl))%>%
+  group_by(year)%>%
+  dplyr::summarise(n_flowered=n(),n_prod_seeds=sum(seeds_01))%>%
+  pivot_longer(cols=n_flowered:n_prod_seeds,
+               names_to="category",values_to="number")%>%
+  ggplot(aes(x=factor(year),y=number,fill=category))+
+  geom_histogram(stat = "identity",position = "dodge",color="black")+
+  xlab("Year")+ylab("Number of plants")+my_theme_legend()+
+  theme(legend.position = c(0.90, 0.88))+
+  scale_fill_manual(values = c("#568fe9", "#c7e6f8"),
+                    name=NULL,labels=c("flowering","producing seeds"))
+ggsave(filename="output/figures/AppendixS1_1.tiff",
+       device="tiff",width=25,height=10,units="cm",dpi=300,compression="lzw")
+```
+
+### Fig. S2
+
+```{r fig.height=4, fig.width=12}
+# FFD
 ggplot(summarySE(data_selag, measurevar="FFD", groupvars="year",na.rm=T),
        aes(x=factor(year),y=FFD))+geom_point(size=3)+
   geom_errorbar(aes(ymin=FFD-sd, ymax=FFD+sd), width=.3)+ geom_point(size=3)+
-  xlab("Year")+ylab("First flowering date\n(days after vernal equinox)")+my_theme()
-ggsave(filename="output/figures/AppendixS2_1.tiff",
+  xlab("Year")+ylab("First flowering date\n(days after vernal equinox)")+
+  my_theme()
+ggsave(filename="output/figures/AppendixS1_2.tiff",
        device="tiff",width=25,height=10,units="cm",dpi=300,compression="lzw")
+```
 
+### Fig. S3
+
+```{r fig.height=4, fig.width=12}
 # Temperatures
 weather_all<-read.table("data/weather.csv",
                     header=T,sep="\t",dec=".") 
@@ -1716,56 +1066,317 @@ ggplot(aes(x=year, y=mean, colour=factor(month),ymin=mean-se, ymax=mean+se))+
   scale_shape_manual(values=c(21,19),guide = FALSE)+
   scale_x_continuous(breaks=seq(1987,2017,1))+
   theme(legend.position = c(0.93, 0.15))
-ggsave(filename="output/figures/AppendixS2_2.tiff",
+ggsave(filename="output/figures/AppendixS1_3.tiff",
        device="tiff",width=350,height=190,units="mm",dpi=300,compression="lzw")
 ```
 
+### Fig. S4
+
 ```{r fig.height=12, fig.width=12}
 # Interactions
-S2_3<-grid.arrange(
-  ggplot(summarySE(data_selag,measurevar="grazing_corr",groupvars="year",na.rm=T),
+S1_4<-grid.arrange(
+  ggplot(summarySE(data_selag,measurevar="grazing_corr",
+                   groupvars="year",na.rm=T),
          aes(x=factor(year),y=grazing_corr))+geom_point(size=3)+
-    geom_errorbar(aes(ymin=grazing_corr-se,ymax=grazing_corr+se), width=.3)+
+    geom_errorbar(aes(ymin=grazing_corr-se,ymax=grazing_corr+se),
+                  width=.3)+
     xlab("Year")+ylab("Grazing")+my_theme()+ggtitle("A)"),
-  ggplot(summarySE(data_selag,measurevar="n_seeds_per_fl",groupvars="year",na.rm=T),
-         aes(x=factor(year),y=n_seeds_per_fl))+geom_point(size=3)+
-    geom_errorbar(aes(ymin=n_seeds_per_fl-se,ymax=n_seeds_per_fl+se), width=.3)+
-    xlab("Year")+ylab("Number of seeds per flower")+my_theme()+ggtitle("B)"),
-  ggplot(summarySE(data_selag,measurevar="prop_pred_seeds",groupvars="year",na.rm=T),
+  ggplot(summarySE(data_selag,measurevar="prop_pred_seeds",
+                   groupvars="year",na.rm=T),
          aes(x=factor(year),y=prop_pred_seeds))+geom_point(size=3)+
-    geom_errorbar(aes(ymin=prop_pred_seeds-se,ymax=prop_pred_seeds+se), width=.3)+
-    xlab("Year")+ylab("Seed predation")+my_theme()+ggtitle("C)"),
+    geom_errorbar(aes(ymin=prop_pred_seeds-se,ymax=prop_pred_seeds+se),
+                  width=.3)+
+    xlab("Year")+ylab("Seed predation")+my_theme()+ggtitle("B)"),
   ncol=1)
-ggsave(filename="output/figures/AppendixS2_3.tiff",
-       plot=S2_3,device="tiff",width=25,height=30,units="cm",dpi=300,compression="lzw")
+ggsave(filename="output/figures/AppendixS1_4.tiff",plot=S1_4,device="tiff"
+       ,width=25,height=20,units="cm",dpi=300,compression="lzw")
 ```
 
-# Correlation table predictors Table 2
+# Appendix S2: Raw relationships biotic interactions ~ FFD in different years
 
-```{r}
-kable(cor(data_selag[c(16:20,29,32:34)],use="pairwise.complete.obs"),digits=3)
+## Fig. S1: Raw relationships grazing ~ FFD in different years
+
+```{r echo=FALSE, fig.height=10, fig.width=8, message=FALSE, warning=FALSE}
+ggplot(subset(data_selag,year<2009),
+       aes(x=FFD,y=grazing_success/(grazing_success+grazing_failure),
+                      succ=grazing_success, fail=grazing_failure))+my_theme()+
+  geom_point(size=1,alpha=0.1)+
+  geom_smooth(method="glm",method.args=list(family="binomial"),
+              formula=cbind(succ,fail)~x,se=T,color="black",size=0.5)+
+  facet_wrap(~year,ncol=3,scales="free")+ylab("Grazing")+
+  xlab("First flowering date (days after vernal equinox)")
+ggsave(filename="output/figures/AppendixS2_1A.tiff",device="tiff",width=168,
+       height=210,units="mm",dpi=300,compression="lzw")
+ggplot(subset(data_selag,year>2008),
+       aes(x=FFD,y=grazing_success/(grazing_success+grazing_failure),
+                      succ=grazing_success, fail=grazing_failure))+my_theme()+
+  geom_point(size=1,alpha=0.1)+
+  geom_smooth(method="glm",method.args=list(family="binomial"),
+              formula=cbind(succ,fail)~x,se=T,color="black",size=0.5)+
+  facet_wrap(~year,ncol=3,scales="free")+ylab("Grazing")+
+  xlab("First flowering date (days after vernal equinox)")
+ggsave(filename="output/figures/AppendixS2_1B.tiff",device="tiff",width=168,
+       height=158,units="mm",dpi=300,compression="lzw")
 ```
 
-# Among-year variation in relationships among interaction intensities and FFD
+## Fig. S2: Raw relationships predation ~ FFD in different years
+
+```{r echo=FALSE, fig.height=10, fig.width=8, message=FALSE, warning=FALSE}
+ggplot(subset(data_selag,year<2009),
+       aes(x=FFD,y=n_pred_seeds/(n_pred_seeds+n_intact_seeds),
+                      succ=n_pred_seeds, fail=n_intact_seeds))+my_theme()+
+  geom_point(size=1,alpha=0.1)+
+  geom_smooth(method="glm",method.args=list(family="binomial"),
+              formula=cbind(succ,fail)~x,se=T,color="black",size=0.5)+
+  facet_wrap(~year,ncol=3,scales="free")+ylab("Seed predation")+
+  xlab("First flowering date (days after vernal equinox)")
+ggsave(filename="output/figures/AppendixS2_2A.tiff",device="tiff",width=168,
+       height=210,units="mm",dpi=300,compression="lzw")
+ggplot(subset(data_selag,year>2008),
+       aes(x=FFD,y=n_pred_seeds/(n_pred_seeds+n_intact_seeds),
+                      succ=n_pred_seeds, fail=n_intact_seeds))+my_theme()+
+  geom_point(size=1,alpha=0.1)+
+  geom_smooth(method="glm",method.args=list(family="binomial"),
+              formula=cbind(succ,fail)~x,se=T,color="black",size=0.5)+
+  facet_wrap(~year,ncol=3,scales="free")+ylab("Seed predation")+
+  xlab("First flowering date (days after vernal equinox)")
+ggsave(filename="output/figures/AppendixS2_2B.tiff",device="tiff",width=168,
+       height=158,units="mm",dpi=300,compression="lzw")
+```
+
+# Appendix S3: Variation in the relationships among interaction intensities and individual flowering time among years
+
+Table: Models with interaction FFD x year
 
 ```{r}
-graz_FFD_yrs<-glmmTMB(cbind(grazing_success,grazing_failure)~FFD*as.factor(year)+(1|id),
-                      data = data_selag,family=betabinomial)
+graz_FFD_yrs<-glmmTMB(cbind(grazing_success,grazing_failure)~
+                        FFD*as.factor(year)+(1|id),
+                      data = data_selag,family="betabinomial")
 Anova(graz_FFD_yrs)
 ```
 
 ```{r}
-seedfl_FFD_yrs<-glmmTMB(round(n_seeds_per_fl)~FFD*as.factor(year)+(1|id),
-                      data = data_selag,family=poisson)
-Anova(seedfl_FFD_yrs)
+pred_FFD_yrs<-glmmTMB(cbind(round(n_pred_seeds),round(n_intact_seeds))~
+                        FFD*as.factor(year),
+                      data=subset(subset(data_selag,n_seeds>0),
+                                  !is.na(n_intact_seeds)),family="betabinomial")
+Anova(pred_FFD_yrs)
+```
+
+# Appendix S4: Relationships fitness-FFD for each level of mean grazing (separately for each year).
+
+```{r message=FALSE, warning=FALSE}
+pred_fitness_all<-ggpredict(mod_int_sel_GLMM,
+                        terms = c("FFD_s_y [all]","grazing_mean [all]"))
+data_grazing_cats<-subset(data_selag,!is.na(FFD_s_y)&!is.na(fitness_rel_y))%>%
+  ungroup()%>%
+  select("year","FFD_s_y","fitness_rel_y","grazing_mean")%>%
+  mutate(grazing_mean=round(grazing_mean,3))
+pred_fitness_all_df<-data.frame(pred_fitness_all)%>%
+  rename(FFD_s_y=x, fitness_rel_y=predicted,grazing_mean=group)%>%
+  mutate(cat="prediction",
+         grazing_mean=as.numeric(as.character(grazing_mean)))%>%
+  left_join(data_grazing_cats[c(1,4)])
+pred_fitness_byyear<-
+  rbind(
+    data.frame(ggpredict(mod_int_sel_GLMM,
+                         terms = c("FFD_s_y [all]","grazing_mean [0.011]")))%>%
+      mutate(year=1993)%>%
+      rename(FFD_s_y=x, fitness_rel_y=predicted,grazing_mean=group),
+    data.frame(ggpredict(mod_int_sel_GLMM,
+                         terms = c("FFD_s_y [all]","grazing_mean [0.016]")))%>%
+      mutate(year=1992)%>%
+      rename(FFD_s_y=x, fitness_rel_y=predicted,grazing_mean=group),
+    data.frame(ggpredict(mod_int_sel_GLMM,
+                         terms = c("FFD_s_y [all]","grazing_mean [0.02]")))%>%
+      mutate(year=2011)%>%
+      rename(FFD_s_y=x, fitness_rel_y=predicted,grazing_mean=group),
+    data.frame(ggpredict(mod_int_sel_GLMM,
+                         terms = c("FFD_s_y [all]","grazing_mean [0.024]")))%>%
+      mutate(year=2014)%>%
+      rename(FFD_s_y=x, fitness_rel_y=predicted,grazing_mean=group),
+    data.frame(ggpredict(mod_int_sel_GLMM,
+                         terms = c("FFD_s_y [all]","grazing_mean [0.025]")))%>%
+      mutate(year=2010)%>%
+      rename(FFD_s_y=x, fitness_rel_y=predicted,grazing_mean=group),
+    data.frame(ggpredict(mod_int_sel_GLMM,
+                         terms = c("FFD_s_y [all]","grazing_mean [0.025]")))%>%
+      mutate(year=2013)%>%
+      rename(FFD_s_y=x, fitness_rel_y=predicted,grazing_mean=group),
+    data.frame(ggpredict(mod_int_sel_GLMM,
+                         terms = c("FFD_s_y [all]","grazing_mean [0.04]")))%>%
+      mutate(year=1996)%>%
+      rename(FFD_s_y=x, fitness_rel_y=predicted,grazing_mean=group),
+    data.frame(ggpredict(mod_int_sel_GLMM,
+                         terms = c("FFD_s_y [all]","grazing_mean [0.043]")))%>%
+      mutate(year=1990)%>%
+      rename(FFD_s_y=x, fitness_rel_y=predicted,grazing_mean=group),
+    data.frame(ggpredict(mod_int_sel_GLMM,
+                         terms = c("FFD_s_y [all]","grazing_mean [0.047]")))%>%
+      mutate(year=1989)%>%
+      rename(FFD_s_y=x, fitness_rel_y=predicted,grazing_mean=group),
+    data.frame(ggpredict(mod_int_sel_GLMM,
+                         terms = c("FFD_s_y [all]","grazing_mean [0.054]")))%>%
+      mutate(year=1987)%>%
+      rename(FFD_s_y=x, fitness_rel_y=predicted,grazing_mean=group),
+    data.frame(ggpredict(mod_int_sel_GLMM,
+                         terms = c("FFD_s_y [all]","grazing_mean [0.063]")))%>%
+      mutate(year=2008)%>%
+      rename(FFD_s_y=x, fitness_rel_y=predicted,grazing_mean=group),
+    data.frame(ggpredict(mod_int_sel_GLMM,
+                         terms = c("FFD_s_y [all]","grazing_mean [0.07]")))%>%
+      mutate(year=1988)%>%
+      rename(FFD_s_y=x, fitness_rel_y=predicted,grazing_mean=group),
+    data.frame(ggpredict(mod_int_sel_GLMM,
+                         terms = c("FFD_s_y [all]","grazing_mean [0.071]")))%>%
+      mutate(year=2007)%>%
+      rename(FFD_s_y=x, fitness_rel_y=predicted,grazing_mean=group),
+    data.frame(ggpredict(mod_int_sel_GLMM,
+                         terms = c("FFD_s_y [all]","grazing_mean [0.078]")))%>%
+      mutate(year=2012)%>%
+      rename(FFD_s_y=x, fitness_rel_y=predicted,grazing_mean=group),
+    data.frame(ggpredict(mod_int_sel_GLMM,
+                         terms = c("FFD_s_y [all]","grazing_mean [0.129]")))%>%
+      mutate(year=2009)%>%
+      rename(FFD_s_y=x, fitness_rel_y=predicted,grazing_mean=group),
+    data.frame(ggpredict(mod_int_sel_GLMM,
+                         terms = c("FFD_s_y [all]","grazing_mean [0.134]")))%>%
+      mutate(year=1991)%>%
+      rename(FFD_s_y=x, fitness_rel_y=predicted,grazing_mean=group),
+    data.frame(ggpredict(mod_int_sel_GLMM,
+                         terms = c("FFD_s_y [all]","grazing_mean [0.242]")))%>%
+      mutate(year=2015)%>%
+      rename(FFD_s_y=x, fitness_rel_y=predicted,grazing_mean=group),
+    data.frame(ggpredict(mod_int_sel_GLMM,
+                         terms = c("FFD_s_y [all]","grazing_mean [0.258]")))%>%
+      mutate(year=2006)%>%
+      rename(FFD_s_y=x, fitness_rel_y=predicted,grazing_mean=group),
+    data.frame(ggpredict(mod_int_sel_GLMM,
+                         terms = c("FFD_s_y [all]","grazing_mean [0.26]")))%>%
+      mutate(year=2016)%>%
+      rename(FFD_s_y=x, fitness_rel_y=predicted,grazing_mean=group),
+    data.frame(ggpredict(mod_int_sel_GLMM,
+                         terms = c("FFD_s_y [all]","grazing_mean [0.261]")))%>%
+      mutate(year=1994)%>%
+      rename(FFD_s_y=x, fitness_rel_y=predicted,grazing_mean=group),
+    data.frame(ggpredict(mod_int_sel_GLMM,
+                         terms = c("FFD_s_y [all]","grazing_mean [0.756]")))%>%
+      mutate(year=2017)%>%
+      rename(FFD_s_y=x, fitness_rel_y=predicted,grazing_mean=group)
+  )
+```
+
+```{r fig.height=10, fig.width=8, message=FALSE, warning=FALSE}
+ggplot(data=subset(data_grazing_cats))+
+  geom_jitter(aes(x=FFD_s_y,y=fitness_rel_y),size=1.5,alpha=0.3,width=0.05)+
+  facet_wrap_paginate(~grazing_mean+year,scales="free",nrow=4,ncol=3,page=1,
+             labeller = labeller(label_value,.multi_line=F))+
+  geom_line(data=pred_fitness_all_df,
+            aes(FFD_s_y,fitness_rel_y,
+                color=as.numeric(as.character(grazing_mean))),size=1)+
+  geom_ribbon(data=pred_fitness_byyear,
+            aes(x=FFD_s_y,y=fitness_rel_y,ymin=conf.low,ymax=conf.high,
+                fill=as.numeric(as.character(grazing_mean))),alpha=0.3)+
+  my_theme()+scale_color_viridis(direction = -1)+
+  scale_fill_viridis(direction = -1)+
+  theme(legend.position="top")+labs(colour="Yearly mean grazing")+
+  xlab("First flowering date")+ylab("Preditect fitness (number of intact seeds)")+
+  theme(strip.text.x=element_text(margin=margin(2,0,2,0)))+
+  guides(fill=FALSE)
+ggsave(filename="output/figures/AppendixS4_A.tiff",device="tiff",width=168,
+       height=210,units="mm",dpi=300,compression="lzw")
+
+ggplot(data=subset(data_grazing_cats))+
+  geom_jitter(aes(x=FFD_s_y,y=fitness_rel_y),size=1.5,alpha=0.3,width=0.05)+
+  facet_wrap_paginate(~grazing_mean+year,scales="free",nrow=4,ncol=3,page=2,
+                      labeller = labeller(label_value,.multi_line=F))+
+  geom_line(data=pred_fitness_all_df,
+            aes(FFD_s_y,fitness_rel_y,
+                color=as.numeric(as.character(grazing_mean))),size=1)+
+  geom_ribbon(data=pred_fitness_byyear,
+              aes(x=FFD_s_y,y=fitness_rel_y,ymin=conf.low,ymax=conf.high,
+                  fill=as.numeric(as.character(grazing_mean))),alpha=0.3)+
+  my_theme()+scale_color_viridis(direction = -1)+
+  scale_fill_viridis(direction = -1)+
+  theme(legend.position="top")+labs(colour="Yearly mean grazing")+
+  xlab("First flowering date")+ylab("Predicted fitness (number of intact seeds)")+
+  theme(strip.text.x=element_text(margin=margin(2,0,2,0)))+
+  guides(fill=FALSE)
+ggsave(filename="output/figures/AppendixS4_B.tiff",device="tiff",width=168,
+       height=210,units="mm",dpi=300,compression="lzw")
+```
+
+# Appendix X: Relationship between flowering frequency and FFD
+
+```{r message=FALSE, warning=FALSE}
+# fl_freq=proportion of years that a plant flowered
+# (number of years flowering / number of years studied).
+# Using plants that were followed for 8-10 years (old period)
+# or 12  years (new period)
+fl_freq<-read.table("data/fl_freq.csv",header=T,sep=",",dec=".")
+data_fl_freq<-data_selag%>%
+  right_join(fl_freq[c(3,6)])%>%
+  group_by(id)%>%
+  dplyr::summarise(mean_FFD=mean(FFD,na.rm=T),fl_freq=mean(fl_freq))
+ggplot(data_fl_freq,aes(x=fl_freq,y=mean_FFD))+
+  geom_jitter(width=0.007,height=0,size=2,alpha=0.15)+
+  geom_smooth(method="lm",color="firebrick2",fill="firebrick2",size=1)+
+  xlab("Flowering frequency")+ylab("Mean first flowering date")+
+  my_theme()
+# Show this one
+ggsave(filename="output/figures/Appendix_X.tiff",
+       device="tiff",width=12,height=10,units="cm",dpi=300,compression="lzw")
+summary(lm(mean_FFD~fl_freq,data=data_fl_freq))
+```
+
+# Effects of variance in temperatures on interactions
+
+```{r message=FALSE, warning=FALSE}
+temp_variance<-read.table("data/temp_variance.csv",
+                          header=T,sep="\t",dec=".") 
+data_selag<-data_selag%>%
+  left_join(temp_variance)
 ```
 
 ```{r}
-pred_FFD_yrs<-glmmTMB(cbind(round(n_pred_seeds),round(n_intact_seeds))~FFD*as.factor(year),
-                      data = subset(subset(data_selag,n_seeds>0),!is.na(n_intact_seeds)),
-                      family=betabinomial)
-Anova(pred_FFD_yrs)
+mod_grazing_tempvar_bb<-glmmTMB(
+  cbind(grazing_success,grazing_failure)~scale(var_3)+scale(var_4)+
+    scale(var_5)+FFD_s_y+n_fl_s_y+(1|id),data = data_selag,
+  family="betabinomial")
+summary(mod_grazing_tempvar_bb)
 ```
+
+```{r message=FALSE, warning=FALSE}
+mod_seedpred_tempvar_bb<-glmmTMB(
+  cbind(round(n_pred_seeds),round(n_intact_seeds))~ scale(var_3)+scale(var_4)+
+    scale(var_5)+scale(var_6)+FFD_s_y+n_fl_s_y+(1|id),data = data_selag,
+  family="betabinomial")
+summary(mod_seedpred_tempvar_bb)
+```
+
+Significant effects, but we probably do not want to get into this. 
+
+# Period effect
+
+```{r}
+mod_grazing_period_bb<-glmmTMB(
+  cbind(grazing_success,grazing_failure)~scale(mean_3)+scale(mean_4)+
+    scale(mean_5)+FFD_s_y+n_fl_s_y+period+(1|id),data = data_selag,
+  family="betabinomial")
+summary(mod_grazing_period_bb)
+```
+
+Significant period effect (disappears when removing 2017).
+
+```{r message=FALSE, warning=FALSE}
+mod_seedpred_period_bb<-glmmTMB(
+  cbind(round(n_pred_seeds),round(n_intact_seeds))~ scale(mean_3)+scale(mean_4)+
+    scale(mean_5)+scale(mean_6)+FFD_s_y+n_fl_s_y+period+(1|id),data = data_selag,
+  family="betabinomial")
+summary(mod_seedpred_period_bb)
+```
+
+
 
 
 

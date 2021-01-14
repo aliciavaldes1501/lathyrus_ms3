@@ -1346,7 +1346,8 @@ kable(cor(data_selag[c(16:20,29,32:34)],use="pairwise.complete.obs"),digits=3)
 # Among-year variation in relationships among interaction intensities and FFD
 
 ```{r}
-graz_FFD_yrs<-glmmTMB(cbind(grazing_success,grazing_failure)~FFD*as.factor(year)+(1|id),
+graz_FFD_yrs<-glmmTMB(cbind(grazing_success,grazing_failure)~
+                        FFD*as.factor(year)+(1|id),
                       data = data_selag,family=betabinomial)
 Anova(graz_FFD_yrs)
 ```
