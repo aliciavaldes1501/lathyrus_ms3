@@ -2,10 +2,12 @@
 title: "Lathyrus ms3: Selective agents"
 output:
   pdf_document:
+    latex_engine: xelatex
     toc: yes
     toc_depth: 4
-editor_options:
-  chunk_output_type: inline
+  editor_options:
+    chunk_output_type: inline
+always_allow_html: true
 ---
 
 ```{r setup, include=FALSE}
@@ -103,6 +105,12 @@ summarySE <- function(data=NULL, measurevar, groupvars=NULL, na.rm=FALSE,
   
   return(datac)
 }
+```
+
+```{r}
+# Load previously saved large objects
+load("output/b_par_1.RData")
+load("output/b_par_2.RData")
 ```
 
 
@@ -357,81 +365,82 @@ path1_mod2_glmer<-glmer(fitness_rel_y~FFD_s_y+n_fl_s_y+grazing_corr+
 ```
 
 
-```{r}
-b_par<-bootMer(x=path1_mod2_glmer,FUN=fixef,nsim=10000)
+```{r eval=FALSE, include=FALSE}
+b_par_1<-bootMer(x=path1_mod2_glmer,FUN=fixef,nsim=10000)
+save(b_par_1,file="output/b_par_1.RData")
 ```
 
 
 ```{r}
-confint(b_par,level=0.95, method="boot") # Percentile method
+confint(b_par_1,level=0.95, method="boot") # Percentile method
 ```
 
 Similar to significances in the lmer model.
 
-### LM (Elsa's code)
+### LM (Elsa's code) (not used)
 
-```{r}
-path1_mod2_LM<-lm(fitness_rel_y~FFD_s_y+n_fl_s_y+grazing_corr+
-                          prop_pred_seeds,
-                  data=subset(data_selag,!is.na(fitness_rel_y)&
-                                                  !is.na(FFD_s_y)&
-                                                  !is.na(n_fl_s_y)&
-                                                  !is.na(grazing_corr)&
-                                                  !is.na(prop_pred_seeds)))
-```
-
-```{r}
-# FFD_s_y
-slp <- function(path1_mod2_LM) coef(path1_mod2_LM)[2]
-b <- car::Boot(path1_mod2_LM,slp, R=10000) # note the capital B
-b1 <- boot::boot.ci(b,type="bca")
-FFD_s_y_ci <- as.data.frame(b1$bca[1,4:5])
-rm(slp, b, b1)
-```
-
-```{r}
-# n_fl_s_y
-slp <- function(path1_mod2_LM) coef(path1_mod2_LM)[3]
-b <- car::Boot(path1_mod2_LM,slp, R=10000) # note the capital B
-b1 <- boot::boot.ci(b,type="bca")
-n_fl_s_y_ci <- as.data.frame(b1$bca[1,4:5])
-rm(slp, b, b1)
-```
-
-```{r}
-# grazing_corr
-slp <- function(path1_mod2_LM) coef(path1_mod2_LM)[4]
-b <- car::Boot(path1_mod2_LM,slp, R=10000) # note the capital B
-b1 <- boot::boot.ci(b,type="bca")
-grazing_corr_ci <- as.data.frame(b1$bca[1,4:5])
-rm(slp, b, b1)
-```
-
-```{r}
-# prop_pred_seeds
-slp <- function(path1_mod2_LM) coef(path1_mod2_LM)[5]
-b <- car::Boot(path1_mod2_LM,slp, R=10000) # note the capital B
-b1 <- boot::boot.ci(b,type="bca")
-prop_pred_seeds_ci <- as.data.frame(b1$bca[1,4:5])
-rm(slp, b, b1)
-```
-
-```{r}
-# Save confidence intervals as a table
-lower_A <- rbind(FFD_s_y_ci[1,] ,n_fl_s_y_ci[1,])
-lower_B <- rbind(lower_A ,grazing_corr_ci[1,])
-lower_C <- rbind(lower_B ,prop_pred_seeds_ci[1,])
-lower <- lower_C
-
-upper_A <- rbind(FFD_s_y_ci[2,] ,n_fl_s_y_ci[2,])
-upper_B <- rbind(upper_A ,grazing_corr_ci[2,])
-upper_C <- rbind(upper_B ,prop_pred_seeds_ci[2,])
-upper <- upper_C
-
-BCIs_path1_mod2_LM <- cbind(lower, upper) 
-rownames(BCIs_path1_mod2_LM) <- c("FFD_s_y","n_fl_s_y",
-                                   "grazing_corr","prop_pred_seeds")
-BCIs_path1_mod2_LM
+```{r eval=FALSE, include=FALSE}
+# path1_mod2_LM<-lm(fitness_rel_y~FFD_s_y+n_fl_s_y+grazing_corr+
+#                           prop_pred_seeds,
+#                   data=subset(data_selag,!is.na(fitness_rel_y)&
+#                                                   !is.na(FFD_s_y)&
+#                                                   !is.na(n_fl_s_y)&
+#                                                   !is.na(grazing_corr)&
+#                                                   !is.na(prop_pred_seeds)))
+# ```
+# 
+# ```{r eval=FALSE, include=FALSE}
+# # FFD_s_y
+# slp <- function(path1_mod2_LM) coef(path1_mod2_LM)[2]
+# b <- car::Boot(path1_mod2_LM,slp, R=10000) # note the capital B
+# b1 <- boot::boot.ci(b,type="bca")
+# FFD_s_y_ci <- as.data.frame(b1$bca[1,4:5])
+# rm(slp, b, b1)
+# ```
+# 
+# ```{r eval=FALSE, include=FALSE}
+# # n_fl_s_y
+# slp <- function(path1_mod2_LM) coef(path1_mod2_LM)[3]
+# b <- car::Boot(path1_mod2_LM,slp, R=10000) # note the capital B
+# b1 <- boot::boot.ci(b,type="bca")
+# n_fl_s_y_ci <- as.data.frame(b1$bca[1,4:5])
+# rm(slp, b, b1)
+# ```
+# 
+# ```{r eval=FALSE, include=FALSE}
+# # grazing_corr
+# slp <- function(path1_mod2_LM) coef(path1_mod2_LM)[4]
+# b <- car::Boot(path1_mod2_LM,slp, R=10000) # note the capital B
+# b1 <- boot::boot.ci(b,type="bca")
+# grazing_corr_ci <- as.data.frame(b1$bca[1,4:5])
+# rm(slp, b, b1)
+# ```
+# 
+# ```{r eval=FALSE, include=FALSE}
+# # prop_pred_seeds
+# slp <- function(path1_mod2_LM) coef(path1_mod2_LM)[5]
+# b <- car::Boot(path1_mod2_LM,slp, R=10000) # note the capital B
+# b1 <- boot::boot.ci(b,type="bca")
+# prop_pred_seeds_ci <- as.data.frame(b1$bca[1,4:5])
+# rm(slp, b, b1)
+# ```
+# 
+# ```{r eval=FALSE, include=FALSE}
+# # Save confidence intervals as a table
+# lower_A <- rbind(FFD_s_y_ci[1,] ,n_fl_s_y_ci[1,])
+# lower_B <- rbind(lower_A ,grazing_corr_ci[1,])
+# lower_C <- rbind(lower_B ,prop_pred_seeds_ci[1,])
+# lower <- lower_C
+# 
+# upper_A <- rbind(FFD_s_y_ci[2,] ,n_fl_s_y_ci[2,])
+# upper_B <- rbind(upper_A ,grazing_corr_ci[2,])
+# upper_C <- rbind(upper_B ,prop_pred_seeds_ci[2,])
+# upper <- upper_C
+# 
+# BCIs_path1_mod2_LM <- cbind(lower, upper) 
+# rownames(BCIs_path1_mod2_LM) <- c("FFD_s_y","n_fl_s_y",
+#                                    "grazing_corr","prop_pred_seeds")
+# BCIs_path1_mod2_LM
 ```
 
 Similar to significances in the lmer model except for grazing, where the CIs overlap zero here. Use only percentile method?
@@ -489,15 +498,15 @@ H3: Variation in climatic conditions during spring among years causes difference
 
 # H3 - Part 1
 
-Variation in climatic conditions during spring among years influences the intensity of biotic interactions. 
+Variation in climatic conditions during spring among years influences the intensity of biotic interactions and the covariance between interaction intensity and plant phenology.
 
-First, models to test the effect of spring temperatures on antagonistic interactions, while accounting for FFD and number of flowers. Using FFD and number of flowers standardized within years, temperatures standardized across years. NOT including interactions among FFD and temperatures. NOT including a random effect of year because there is only one value of temperature for each year. 
+First, models to test the effect of spring temperatures on antagonistic interactions, while accounting for FFD and number of flowers. Using FFD and number of flowers standardized within years, temperatures standardized across years. Including interactions among FFD and temperatures. NOT including a random effect of year because there is only one value of temperature for each year. 
 
 ## Grazing
 
 ```{r message=FALSE, warning=FALSE}
 mod_grazing<-glmmTMB(cbind(grazing_success,grazing_failure)~
-                     scale(mean_3)+scale(mean_4)+scale(mean_5)+FFD_s_y+
+                     (scale(mean_3)+scale(mean_4)+scale(mean_5))*FFD_s_y+
                      n_fl_s_y+(1|id),data = data_selag,
                    family="binomial")
 summary(mod_grazing)
@@ -521,7 +530,7 @@ plot(sim_mod_grazing,quantreg=T)
 testDispersion(sim_mod_grazing)
 ```
 
-OK.
+Slightly underdispersed.
 
 ```{r}
 testZeroInflation(sim_mod_grazing)
@@ -533,7 +542,7 @@ Test of zero inflation is significant.
 
 ```{r}
 mod_grazing_bb<-glmmTMB(cbind(grazing_success,grazing_failure)~
-                       scale(mean_3)+scale(mean_4)+scale(mean_5)+FFD_s_y+
+                       (scale(mean_3)+scale(mean_4)+scale(mean_5))*FFD_s_y+
                        n_fl_s_y+(1|id),data = data_selag,
                      family="betabinomial")
 summary(mod_grazing_bb)
@@ -557,7 +566,7 @@ plot(sim_mod_grazing_bb,quantreg=T)
 testDispersion(sim_mod_grazing_bb)
 ```
 
-More underdispersion!
+Still underdispersion.
 
 ```{r}
 testZeroInflation(sim_mod_grazing_bb)
@@ -575,8 +584,8 @@ Keep mod_grazing_bb.
 
 ```{r message=FALSE, warning=FALSE}
 mod_seedpred<-glmmTMB(cbind(round(n_pred_seeds),round(n_intact_seeds))~
-                     scale(mean_3)+scale(mean_4)+scale(mean_5)+scale(mean_6)+
-                      FFD_s_y+n_fl_s_y+(1|id),data = data_selag,
+                     (scale(mean_3)+scale(mean_4)+scale(mean_5)+scale(mean_6))*
+                      FFD_s_y+n_fl_s_y+(1|id),data=subset(data_selag,n_seeds>0),
                     family="binomial")
 summary(mod_seedpred)
 ```
@@ -598,17 +607,20 @@ plot(sim_mod_seedpred,quantreg=T)
 ```{r}
 testDispersion(sim_mod_seedpred)
 ```
+OK.
 
 ```{r}
 testZeroInflation(sim_mod_seedpred)
 ```
 
+Zero inflation.
+
 ### Try with betabinomial
 
 ```{r message=FALSE, warning=FALSE}
 mod_seedpred_bb<-glmmTMB(cbind(round(n_pred_seeds),round(n_intact_seeds))~
-                     scale(mean_3)+scale(mean_4)+scale(mean_5)+scale(mean_6)+
-                      FFD_s_y+n_fl_s_y+(1|id),data = data_selag,
+                     (scale(mean_3)+scale(mean_4)+scale(mean_5)+scale(mean_6))*
+                      FFD_s_y+n_fl_s_y+(1|id),data=subset(data_selag,n_seeds>0),
                     family="betabinomial")
 summary(mod_seedpred_bb)
 ```
@@ -631,9 +643,13 @@ plot(sim_mod_seedpred_bb,quantreg=T)
 testDispersion(sim_mod_seedpred_bb)
 ```
 
+Slight underdispersion.
+
 ```{r}
 testZeroInflation(sim_mod_seedpred_bb)
 ```
+
+OK.
 
 ```{r}
 anova(mod_seedpred,mod_seedpred_bb)
@@ -651,19 +667,12 @@ kable(summary(mod_seedpred_bb)$coefficients,digits=c(3,3,2,3))
 
 ## Graphs for Fig 2 - Part 1
 
-```{r message=FALSE, warning=FALSE}
-mod_grazing_bb_weights<-glmmTMB(grazing_corr~scale(mean_3)+scale(mean_4)+
-                                  scale(mean_5)+FFD_s_y+n_fl_s_y+(1|id),
-                                data = data_selag,weights=grazing_weights,
-                                family="betabinomial")
-```
-
 ```{r}
-pred_grazing_mean3<-ggpredict(mod_grazing_bb_weights,
+pred_grazing_mean3<-ggpredict(mod_grazing_bb,
                               terms = c("mean_3 [all]"))
-pred_grazing_mean4<-ggpredict(mod_grazing_bb_weights,
+pred_grazing_mean4<-ggpredict(mod_grazing_bb,
                               terms = c("mean_4 [all]"))
-pred_grazing_mean5<-ggpredict(mod_grazing_bb_weights,
+pred_grazing_mean5<-ggpredict(mod_grazing_bb,
                               terms = c("mean_5 [all]"))
 ```
 
@@ -701,39 +710,41 @@ Fig_2_temps_grazing<-grid.arrange(
     theme(axis.text.y=element_blank()),
   ncol=3)
 ggsave(filename="output/figures/Fig_2_temps_grazing.tiff",
-       plot=Fig_2_temps_grazing,device="tiff",width=15,height=10,units="cm",
+       plot=Fig_2_temps_grazing,device="tiff",width=15,height=8,units="cm",
        dpi=300,compression="lzw")
 ```
 
-```{r message=FALSE, warning=FALSE}
-data_selag$n_seeds_rounded<-round(data_selag$n_seeds)
-mod_seedpred_bb_weights<-glmmTMB(prop_pred_seeds~scale(mean_3)+scale(mean_4)+
-                                   scale(mean_5)+scale(mean_6)+FFD_s_y+n_fl_s_y+
-                                   (1|id),data = data_selag,
-                                 family="betabinomial",weights=n_seeds_rounded)
-```
-
 ```{r}
-pred_seedpred_mean3<-ggpredict(mod_seedpred_bb_weights,
-                              terms = c("mean_3 [all]"))
-pred_seedpred_mean5<-ggpredict(mod_seedpred_bb_weights,
+pred_seedpred_mean3_FFD<-ggpredict(mod_seedpred_bb,
+                        terms = c("mean_3 [all]","FFD_s_y [-2.6:3.9 by=.5]"))
+pred_seedpred_mean4_FFD<-ggpredict(mod_seedpred_bb,
+                        terms = c("mean_4 [all]","FFD_s_y [-2.6:3.9 by=.5]"))
+pred_seedpred_mean5<-ggpredict(mod_seedpred_bb,
                               terms = c("mean_5 [all]"))
-pred_seedpred_mean6<-ggpredict(mod_seedpred_bb_weights,
+pred_seedpred_mean6<-ggpredict(mod_seedpred_bb,
                               terms = c("mean_6 [all]"))
 ```
 
 ```{r fig.height=4, fig.width=12, message=FALSE, warning=FALSE}
 Fig_2_temps_seedpred<-grid.arrange(
-  ggplot(data_selag,aes(x=mean_3,y=prop_pred_seeds))+
-    geom_point(size=3,alpha=0.05)+
-    geom_ribbon(data=pred_seedpred_mean3,
-                aes(x,predicted,ymin=conf.low,ymax=conf.high),
-                fill="firebrick2",alpha=0.3)+
-    geom_line(data=pred_seedpred_mean3,aes(x,predicted),
-              color="firebrick2",size=1)+
-    my_theme()+xlab("Mean March (ºC)")+ylab(NULL)+
-    theme(plot.margin = unit(c(0.3,0.1,0.3,0.1), "cm"))+
-    theme(axis.text.y=element_blank()),
+  ggplot(pred_seedpred_mean3_FFD,aes(x,predicted,colour=group,fill=group))+
+    geom_line(aes(color=as.numeric(as.character(group))),size=0.6)+my_theme()+
+    scale_color_viridis()+
+    theme(axis.text.y=element_blank())+
+    scale_y_continuous(breaks = seq(0, 1, by = 0.25))+ylim(0,1)+
+    theme(legend.justification=c(1.1,0.99),legend.position=c(1.07,0.89),
+        legend.direction="horizontal",legend.title=element_blank())+
+    annotate("text",x=0.8,y=0.98,label="FFD: early          late",
+             family="serif",size=5)+
+    xlab("Mean March (ºC)")+ylab(NULL)+
+    theme(plot.margin = unit(c(0.3,0.1,0.3,0.1), "cm")),
+  ggplot(pred_seedpred_mean4_FFD,aes(x,predicted,colour=group,fill=group))+
+    geom_line(aes(color=as.numeric(as.character(group))),size=0.6)+my_theme()+
+    scale_color_viridis()+
+    theme(axis.text.y=element_blank())+
+    scale_y_continuous(breaks = seq(0, 1, by = 0.25))+ylim(0,1)+
+    xlab("Mean April (ºC)")+ylab(NULL)+
+    theme(plot.margin = unit(c(0.3,0.1,0.3,0.1), "cm")),
   ggplot(data_selag,aes(x=mean_5,y=prop_pred_seeds))+
     geom_point(size=3,alpha=0.05)+
     geom_ribbon(data=pred_seedpred_mean5,
@@ -754,17 +765,17 @@ Fig_2_temps_seedpred<-grid.arrange(
     my_theme()+xlab("Mean June (ºC)")+ylab(NULL)+
     theme(plot.margin = unit(c(0.3,0.1,0.3,0.1), "cm"))+
     theme(axis.text.y=element_blank()),
-  ncol=3)
+  ncol=4)
 ggsave(filename="output/figures/Fig_2_temps_seedpred.tiff",
-       plot=Fig_2_temps_seedpred,device="tiff",width=15,height=10,units="cm",
+       plot=Fig_2_temps_seedpred,device="tiff",width=20,height=8,units="cm",
        dpi=300,compression="lzw")
 ```
 
 # H3 - Part 2
 
-Differences in the intensity of biotic interactions among years cause differences in selection on flowering time. 
+Differences in the intensity of biotic interactions among years, and in the covariance between FFD and biotic interaction intensities, cause differences in selection on flowering time. 
 
-In this phenotypic selection model, we use: fitness relativized within years, FFD and n_fl standardized within years,interactions standardized accross years. Main effects of interactions are not included because fitness was relativized within years. 
+In this phenotypic selection model, we use: fitness relativized within years, FFD and n_fl standardized within years,interactions and covariances standardized accross years. Main effects of interactions and covariances are not included because fitness was relativized within years. 
 
 N = 2376
 
@@ -777,18 +788,55 @@ data_selag_means<-data_selag%>%
 data_selag<-data_selag%>%left_join(data_selag_means,by="year")
 ```
 
-```{r}
+```{r message=FALSE, warning=FALSE}
+# Calculate covariance interactions - fitness for each  year
+covar_graz_FFD<-data_selag%>%
+  group_by(year)%>%
+  do(graz_FFD = tidy(glm(cbind(grazing_success,grazing_failure)~FFD_s_y, 
+                             data = .,family="binomial"))) %>% 
+  unnest(graz_FFD)%>%
+  filter(term=="FFD_s_y")%>%
+  select(year,estimate)%>%
+  rename(covar_graz_FFD=estimate)
+
+covar_seedpred_FFD<-data_selag%>%
+  filter(n_seeds>0)%>%
+  filter(!is.na(n_intact_seeds))%>%
+  group_by(year)%>%
+  do(seedpred_FFD = tidy(glm(cbind(round(n_pred_seeds),round(n_intact_seeds))~
+                               FFD_s_y,data = .,
+                             family="binomial"))) %>% 
+  unnest(seedpred_FFD)%>%
+  filter(term=="FFD_s_y")%>%
+  select(year,estimate)%>%
+  rename(covar_seedpred_FFD=estimate)
+
+data_selag_means<-data_selag_means%>%
+  full_join(covar_graz_FFD)%>%
+  full_join(covar_seedpred_FFD)
+
+# Add yearly covariances interactions - fitness to dataset 
+data_selag<-data_selag%>%left_join(data_selag_means[c(1,4:5)],by="year")
+```
+
+```{r message=FALSE, warning=FALSE}
 mod_int_sel_GLMM<-glmmTMB(fitness_rel_y ~ FFD_s_y+n_fl_s_y+
-                         FFD_s_y:scale(grazing_mean)+
-                         FFD_s_y:scale(prop_pred_seeds_mean)+
-                         (1|id),data_selag,family="gaussian")
-mod_int_sel_GLMM<-lmer(fitness_rel_y ~ FFD_s_y+n_fl_s_y+
-                         FFD_s_y:scale(grazing_mean)+
-                         FFD_s_y:scale(prop_pred_seeds_mean)+
-                         (1|id),data_selag)
+                            FFD_s_y:scale(grazing_mean)+
+                            FFD_s_y:scale(covar_graz_FFD)+
+                            FFD_s_y:scale(prop_pred_seeds_mean)+
+                            FFD_s_y:scale(covar_seedpred_FFD)+
+                            (1|id),data_selag,family="gaussian")
+mod_int_sel_GLMM_lmer<-lmer(fitness_rel_y ~ FFD_s_y+n_fl_s_y+
+                              FFD_s_y:scale(grazing_mean)+
+                              FFD_s_y:scale(covar_graz_FFD)+
+                              FFD_s_y:scale(prop_pred_seeds_mean)+
+                              FFD_s_y:scale(covar_seedpred_FFD)+
+                              (1|id),data_selag)
 mod_int_sel_LM<-lm(fitness_rel_y ~ FFD_s_y+n_fl_s_y+
                          FFD_s_y:scale(grazing_mean)+
-                         FFD_s_y:scale(prop_pred_seeds_mean),
+                            FFD_s_y:scale(covar_graz_FFD)+
+                            FFD_s_y:scale(prop_pred_seeds_mean)+
+                            FFD_s_y:scale(covar_seedpred_FFD),
                    subset(data_selag,!is.na(fitness_rel_y)&
                             !is.na(FFD_s_y)&!is.na(n_fl_s_y)&
                             !is.na(grazing_mean)&
@@ -799,7 +847,7 @@ kable(summary(mod_int_sel_GLMM)$coefficients,digits=c(3,3,0,2,3))
 kable(Anova(mod_int_sel_GLMM),digits=c(2,1,3))
 ```
 
-Significant effect of grazing on selection (but we have seen that the significance is driven by the year 2017).
+Significant effect of yearly mean grazing on selection (but we have seen that the significance is driven by the year 2017).
 
 ## Model diagnostics
 
@@ -822,70 +870,71 @@ Looking bad, calculate bootstrapped CIs.
 
 ### Mixed model
 
-```{r}
-b_par<-bootMer(x=mod_int_sel_GLMM,FUN=fixef,nsim=10000)
+```{r eval=FALSE, include=FALSE}
+b_par_2<-bootMer(x=mod_int_sel_GLMM_lmer,FUN=fixef,nsim=10000)
+save(b_par_2,file="output/b_par_2.RData")
 ```
 
 ```{r}
-confint(b_par,level=0.95, method="boot") # Percentile method
+confint(b_par_2,level=0.95, method="boot") # Percentile method
 ```
 
 Similar to significances in the model
 
-### LM (Elsa's code)
+### LM (Elsa's code) (not used)
 
-```{r}
-# FFD_s_y
-slp <- function(mod_int_sel_LM) coef(mod_int_sel_LM)[2]
-b <- car::Boot(mod_int_sel_LM,slp, R=10000) # note the capital B
-b1 <- boot::boot.ci(b,type="bca")
-FFD_s_y_ci <- as.data.frame(b1$bca[1,4:5])
-rm(slp, b, b1)
-```
-
-```{r}
-# n_fl_s_y
-slp <- function(mod_int_sel_LM) coef(mod_int_sel_LM)[3]
-b <- car::Boot(mod_int_sel_LM,slp, R=10000) # note the capital B
-b1 <- boot::boot.ci(b,type="bca")
-n_fl_s_y_ci <- as.data.frame(b1$bca[1,4:5])
-rm(slp, b, b1)
-```
-
-```{r}
-# FFD_s_y:grazing_mean_s
-slp <- function(mod_int_sel_LM) coef(mod_int_sel_LM)[4]
-b <- car::Boot(mod_int_sel_LM,slp, R=10000) # note the capital B
-b1 <- boot::boot.ci(b,type="bca")
-FFD_s_y_graz_ci <- as.data.frame(b1$bca[1,4:5])
-rm(slp, b, b1)
-```
-
-```{r}
-# prop_pred_seeds_mean_s
-slp <- function(mod_int_sel_LM) coef(mod_int_sel_LM)[5]
-b <- car::Boot(mod_int_sel_LM,slp, R=10000) # note the capital B
-b1 <- boot::boot.ci(b,type="bca")
-FFD_s_y_pred_ci <- as.data.frame(b1$bca[1,4:5])
-rm(slp, b, b1)
-```
-
-```{r}
-# Save confidence intervals as a table
-lower_A <- rbind(FFD_s_y_ci[1,] ,n_fl_s_y_ci[1,])
-lower_B <- rbind(lower_A ,FFD_s_y_graz_ci[1,])
-lower_C <- rbind(lower_B ,FFD_s_y_pred_ci[1,])
-lower <- lower_C
-
-upper_A <- rbind(FFD_s_y_ci[2,] ,n_fl_s_y_ci[2,])
-upper_B <- rbind(upper_A ,FFD_s_y_graz_ci[2,])
-upper_C <- rbind(upper_B ,FFD_s_y_pred_ci[2,])
-upper <- upper_C
-
-BCIs_mod_int_sel_LM <- cbind(lower, upper) 
-rownames(BCIs_mod_int_sel_LM) <- c("FFD_s_y","n_fl_s_y",
-                                   "FFD_s_y:graz","FFD_s_y:pred")
-BCIs_mod_int_sel_LM
+```{r eval=FALSE, include=FALSE}
+# # FFD_s_y
+# slp <- function(mod_int_sel_LM) coef(mod_int_sel_LM)[2]
+# b <- car::Boot(mod_int_sel_LM,slp, R=10000) # note the capital B
+# b1 <- boot::boot.ci(b,type="bca")
+# FFD_s_y_ci <- as.data.frame(b1$bca[1,4:5])
+# rm(slp, b, b1)
+# ```
+# 
+# ```{r eval=FALSE, include=FALSE}
+# # n_fl_s_y
+# slp <- function(mod_int_sel_LM) coef(mod_int_sel_LM)[3]
+# b <- car::Boot(mod_int_sel_LM,slp, R=10000) # note the capital B
+# b1 <- boot::boot.ci(b,type="bca")
+# n_fl_s_y_ci <- as.data.frame(b1$bca[1,4:5])
+# rm(slp, b, b1)
+# ```
+# 
+# ```{r eval=FALSE, include=FALSE}
+# # FFD_s_y:grazing_mean_s
+# slp <- function(mod_int_sel_LM) coef(mod_int_sel_LM)[4]
+# b <- car::Boot(mod_int_sel_LM,slp, R=10000) # note the capital B
+# b1 <- boot::boot.ci(b,type="bca")
+# FFD_s_y_graz_ci <- as.data.frame(b1$bca[1,4:5])
+# rm(slp, b, b1)
+# ```
+# 
+# ```{r eval=FALSE, include=FALSE}
+# # prop_pred_seeds_mean_s
+# slp <- function(mod_int_sel_LM) coef(mod_int_sel_LM)[5]
+# b <- car::Boot(mod_int_sel_LM,slp, R=10000) # note the capital B
+# b1 <- boot::boot.ci(b,type="bca")
+# FFD_s_y_pred_ci <- as.data.frame(b1$bca[1,4:5])
+# rm(slp, b, b1)
+# ```
+# 
+# ```{r eval=FALSE, include=FALSE}
+# # Save confidence intervals as a table
+# lower_A <- rbind(FFD_s_y_ci[1,] ,n_fl_s_y_ci[1,])
+# lower_B <- rbind(lower_A ,FFD_s_y_graz_ci[1,])
+# lower_C <- rbind(lower_B ,FFD_s_y_pred_ci[1,])
+# lower <- lower_C
+# 
+# upper_A <- rbind(FFD_s_y_ci[2,] ,n_fl_s_y_ci[2,])
+# upper_B <- rbind(upper_A ,FFD_s_y_graz_ci[2,])
+# upper_C <- rbind(upper_B ,FFD_s_y_pred_ci[2,])
+# upper <- upper_C
+# 
+# BCIs_mod_int_sel_LM <- cbind(lower, upper) 
+# rownames(BCIs_mod_int_sel_LM) <- c("FFD_s_y","n_fl_s_y",
+#                                    "FFD_s_y:graz","FFD_s_y:pred")
+# BCIs_mod_int_sel_LM
 ```
 
 Similar to significances in the model
@@ -900,8 +949,8 @@ pred_fitness<-ggpredict(mod_int_sel_GLMM,
 ```{r fig.height=4, fig.width=6}
 Fig_2_fitness<-ggplot(pred_fitness,aes(x,predicted,colour=group,fill=group))+
   geom_line(aes(color=as.numeric(as.character(group))),size=0.6)+my_theme()+
-  scale_color_viridis(direction = -1)+
-  theme(legend.position="top")+labs(colour="Yearly\nmean grazing  ")+
+  scale_color_viridis()+
+  theme(legend.position="top")+labs(colour="Mean grazing\nprobability")+
   xlab("First flowering date")+ylab("Predicted fitness")
 Fig_2_fitness
 ggsave(filename="output/figures/Fig_2_fitness.tiff",
@@ -1119,6 +1168,17 @@ ggsave(filename="output/figures/AppendixS2_1B.tiff",device="tiff",width=168,
        height=158,units="mm",dpi=300,compression="lzw")
 ```
 
+See which models are significant and add asterisks in Inkscape.
+
+```{r}
+data_selag%>%
+  group_by(year)%>%
+  do(models = tidy(glm(cbind(grazing_success,grazing_failure)~FFD,
+                       family="binomial", data = .))) %>% 
+  unnest(models)%>%
+  kable()
+```
+
 ## Fig. S2: Raw relationships predation ~ FFD in different years
 
 ```{r echo=FALSE, fig.height=10, fig.width=8, message=FALSE, warning=FALSE}
@@ -1144,6 +1204,17 @@ ggsave(filename="output/figures/AppendixS2_2B.tiff",device="tiff",width=168,
        height=158,units="mm",dpi=300,compression="lzw")
 ```
 
+See which models are significant and add asterisks in Inkscape.
+
+```{r}
+data_selag%>%
+  group_by(year)%>%
+  do(models = tidy(glm(cbind(round(n_pred_seeds),round(n_intact_seeds))~FFD,
+                       family="binomial", data = .))) %>% 
+  unnest(models)%>%
+  kable()
+```
+
 # Appendix S3: Variation in the relationships among interaction intensities and individual flowering time among years
 
 Table: Models with interaction FFD x year
@@ -1163,7 +1234,112 @@ pred_FFD_yrs<-glmmTMB(cbind(round(n_pred_seeds),round(n_intact_seeds))~
 Anova(pred_FFD_yrs)
 ```
 
-# Appendix S4: Relationships fitness-FFD for each level of mean grazing (separately for each year).
+# Appendix S4:Relationships between temperatures and predicted seed predation for different parts of the distribution of flowering dates
+
+```{r}
+mean(subset(data_selag,n_seeds>0&FFD_s_y<=-0.84)$FFD_s_y) 
+# Mean cat 1 = -1.247518
+mean(subset(data_selag,n_seeds>0&FFD_s_y>-0.84&FFD_s_y<=-0.28)$FFD_s_y) 
+# Mean cat 2 = -0.5992093
+mean(subset(data_selag,n_seeds>0&FFD_s_y>-0.28&FFD_s_y<=0.26)$FFD_s_y) 
+# Mean cat 3 = -0.008394325
+mean(subset(data_selag,n_seeds>0&FFD_s_y>0.16)$FFD_s_y) 
+# Mean cat 4 = 0.7891997
+
+pred_seedpred_mean3<-rbind(
+  (data.frame(ggpredict(mod_seedpred_bb,
+                        terms = c("mean_3 [all]","FFD_s_y [-1.247518]")))%>%
+     mutate(FFD_s_y_cat=1)%>%
+     dplyr::rename(temp=x, prop_pred_seeds=predicted,FFD_s_y=group)),
+  (data.frame(ggpredict(mod_seedpred_bb,
+                        terms = c("mean_3 [all]","FFD_s_y [-0.5992093]")))%>%
+     mutate(FFD_s_y_cat=2)%>%
+     dplyr::rename(temp=x, prop_pred_seeds=predicted,FFD_s_y=group)),
+  (data.frame(ggpredict(mod_seedpred_bb,
+                        terms = c("mean_3 [all]","FFD_s_y [-0.008394325]")))%>%
+     mutate(FFD_s_y_cat=3)%>%
+     dplyr::rename(temp=x, prop_pred_seeds=predicted,FFD_s_y=group)),
+  (data.frame(ggpredict(mod_seedpred_bb,
+                        terms = c("mean_3 [all]","FFD_s_y [0.7891997]")))%>%
+     mutate(FFD_s_y_cat=4)%>%
+     dplyr::rename(temp=x, prop_pred_seeds=predicted,FFD_s_y=group)))%>%
+  mutate(month="3")
+pred_seedpred_mean4<-rbind(
+  (data.frame(ggpredict(mod_seedpred_bb,
+                        terms = c("mean_4 [all]","FFD_s_y [-1.247518]")))%>%
+     mutate(FFD_s_y_cat=1)%>%
+     dplyr::rename(temp=x, prop_pred_seeds=predicted,FFD_s_y=group)),
+  (data.frame(ggpredict(mod_seedpred_bb,
+                        terms = c("mean_4 [all]","FFD_s_y [-0.5992093]")))%>%
+     mutate(FFD_s_y_cat=2)%>%
+     dplyr::rename(temp=x, prop_pred_seeds=predicted,FFD_s_y=group)),
+  (data.frame(ggpredict(mod_seedpred_bb,
+                        terms = c("mean_4 [all]","FFD_s_y [-0.008394325]")))%>%
+     mutate(FFD_s_y_cat=3)%>%
+     dplyr::rename(temp=x, prop_pred_seeds=predicted,FFD_s_y=group)),
+  (data.frame(ggpredict(mod_seedpred_bb,
+                        terms = c("mean_4 [all]","FFD_s_y [0.7891997]")))%>%
+     mutate(FFD_s_y_cat=4)%>%
+     dplyr::rename(temp=x, prop_pred_seeds=predicted,FFD_s_y=group)))%>%
+  mutate(month="4")
+pred_seedpred<-rbind(pred_seedpred_mean3,pred_seedpred_mean4)
+
+label_names1 <- list(
+  '1'="First quarter\nMean FFD = -1.25",
+  '2'="Second quarter\nMean FFD = -0.60",
+  '3'="Third quarter\nMean FFD = -0.01",
+  '4'="Fourth quarter\nMean FFD = 0.79"
+)
+
+label_names2 <- list(
+  '3'="March",
+  '4'="April"
+)
+
+labeller_function1 <- function(variable,value){
+  return(label_names1[value])
+}
+
+labeller_function2 <- function(variable,value){
+  return(label_names2[value])
+}
+```
+
+```{r}
+ggplot(subset(data_selag,n_seeds>0&!is.na(FFD_s_y))%>%
+         ungroup()%>%
+         # Define 4 FFD_s_y categories based on quartiles
+         mutate(FFD_s_y_cat=as.factor(
+           ifelse(FFD_s_y<=-0.84,1,
+                  ifelse(FFD_s_y>-0.84&FFD_s_y<=-0.28,2,
+                         ifelse(FFD_s_y>-0.28&FFD_s_y<=0.26,3,4)))))%>%
+         select(mean_3,mean_4,prop_pred_seeds,FFD_s_y_cat)%>%
+         dplyr::rename(March=mean_3,April=mean_4)%>%
+         pivot_longer(cols=March:April,names_to="month",values_to="temp")%>%
+         mutate(month=ifelse(month=="March",3,4)),
+       aes(x=temp,y=prop_pred_seeds))+
+  facet_grid(month~FFD_s_y_cat,scales="free",
+             labeller=labeller(FFD_s_y_cat=labeller_function1,
+                               month=labeller_function2))+
+  geom_jitter(size=1.5,alpha=0.3,width=0.05)+
+  geom_line(data=pred_seedpred,
+            aes(x=temp,y=prop_pred_seeds,color=FFD_s_y_cat),size=1)+
+  geom_ribbon(data=pred_seedpred,aes(x=temp,y=prop_pred_seeds,
+                                     ymin=conf.low,ymax=conf.high,
+                                     fill=FFD_s_y_cat),alpha=0.3)+
+  my_theme()+scale_color_viridis(labels=NULL)+scale_fill_viridis(labels=NULL)+
+  theme(legend.position="top")+labs(colour="First flowering date      ")+
+  xlab("Mean temperature (ºC)")+
+  ylab("Predicted seed predation")+
+  scale_x_continuous(breaks=c(-4,-2,0,2,4,6,8))+
+  theme(strip.text.x=element_text(margin=margin(2,0,2,0)))+
+  guides(fill=FALSE)
+ggsave(filename="output/figures/AppendixS4.tiff",
+       device="tiff",width=350,height=190,units="mm",dpi=300,compression="lzw")
+```
+
+
+# Appendix S5: Relationships fitness-FFD for each level of mean grazing (separately for each year).
 
 ```{r message=FALSE, warning=FALSE}
 pred_fitness_all<-ggpredict(mod_int_sel_GLMM,
@@ -1173,7 +1349,7 @@ data_grazing_cats<-subset(data_selag,!is.na(FFD_s_y)&!is.na(fitness_rel_y))%>%
   select("year","FFD_s_y","fitness_rel_y","grazing_mean")%>%
   mutate(grazing_mean=round(grazing_mean,3))
 pred_fitness_all_df<-data.frame(pred_fitness_all)%>%
-  rename(FFD_s_y=x, fitness_rel_y=predicted,grazing_mean=group)%>%
+  dplyr::rename(FFD_s_y=x, fitness_rel_y=predicted,grazing_mean=group)%>%
   mutate(cat="prediction",
          grazing_mean=as.numeric(as.character(grazing_mean)))%>%
   left_join(data_grazing_cats[c(1,4)])
@@ -1182,87 +1358,87 @@ pred_fitness_byyear<-
     data.frame(ggpredict(mod_int_sel_GLMM,
                          terms = c("FFD_s_y [all]","grazing_mean [0.011]")))%>%
       mutate(year=1993)%>%
-      rename(FFD_s_y=x, fitness_rel_y=predicted,grazing_mean=group),
+      dplyr::rename(FFD_s_y=x, fitness_rel_y=predicted,grazing_mean=group),
     data.frame(ggpredict(mod_int_sel_GLMM,
                          terms = c("FFD_s_y [all]","grazing_mean [0.016]")))%>%
       mutate(year=1992)%>%
-      rename(FFD_s_y=x, fitness_rel_y=predicted,grazing_mean=group),
+      dplyr::rename(FFD_s_y=x, fitness_rel_y=predicted,grazing_mean=group),
     data.frame(ggpredict(mod_int_sel_GLMM,
                          terms = c("FFD_s_y [all]","grazing_mean [0.02]")))%>%
       mutate(year=2011)%>%
-      rename(FFD_s_y=x, fitness_rel_y=predicted,grazing_mean=group),
+      dplyr::rename(FFD_s_y=x, fitness_rel_y=predicted,grazing_mean=group),
     data.frame(ggpredict(mod_int_sel_GLMM,
                          terms = c("FFD_s_y [all]","grazing_mean [0.024]")))%>%
       mutate(year=2014)%>%
-      rename(FFD_s_y=x, fitness_rel_y=predicted,grazing_mean=group),
+      dplyr::rename(FFD_s_y=x, fitness_rel_y=predicted,grazing_mean=group),
     data.frame(ggpredict(mod_int_sel_GLMM,
                          terms = c("FFD_s_y [all]","grazing_mean [0.025]")))%>%
       mutate(year=2010)%>%
-      rename(FFD_s_y=x, fitness_rel_y=predicted,grazing_mean=group),
+      dplyr::rename(FFD_s_y=x, fitness_rel_y=predicted,grazing_mean=group),
     data.frame(ggpredict(mod_int_sel_GLMM,
                          terms = c("FFD_s_y [all]","grazing_mean [0.025]")))%>%
       mutate(year=2013)%>%
-      rename(FFD_s_y=x, fitness_rel_y=predicted,grazing_mean=group),
+      dplyr::rename(FFD_s_y=x, fitness_rel_y=predicted,grazing_mean=group),
     data.frame(ggpredict(mod_int_sel_GLMM,
                          terms = c("FFD_s_y [all]","grazing_mean [0.04]")))%>%
       mutate(year=1996)%>%
-      rename(FFD_s_y=x, fitness_rel_y=predicted,grazing_mean=group),
+      dplyr::rename(FFD_s_y=x, fitness_rel_y=predicted,grazing_mean=group),
     data.frame(ggpredict(mod_int_sel_GLMM,
                          terms = c("FFD_s_y [all]","grazing_mean [0.043]")))%>%
       mutate(year=1990)%>%
-      rename(FFD_s_y=x, fitness_rel_y=predicted,grazing_mean=group),
+      dplyr::rename(FFD_s_y=x, fitness_rel_y=predicted,grazing_mean=group),
     data.frame(ggpredict(mod_int_sel_GLMM,
                          terms = c("FFD_s_y [all]","grazing_mean [0.047]")))%>%
       mutate(year=1989)%>%
-      rename(FFD_s_y=x, fitness_rel_y=predicted,grazing_mean=group),
+      dplyr::rename(FFD_s_y=x, fitness_rel_y=predicted,grazing_mean=group),
     data.frame(ggpredict(mod_int_sel_GLMM,
                          terms = c("FFD_s_y [all]","grazing_mean [0.054]")))%>%
       mutate(year=1987)%>%
-      rename(FFD_s_y=x, fitness_rel_y=predicted,grazing_mean=group),
+      dplyr::rename(FFD_s_y=x, fitness_rel_y=predicted,grazing_mean=group),
     data.frame(ggpredict(mod_int_sel_GLMM,
                          terms = c("FFD_s_y [all]","grazing_mean [0.063]")))%>%
       mutate(year=2008)%>%
-      rename(FFD_s_y=x, fitness_rel_y=predicted,grazing_mean=group),
+      dplyr::rename(FFD_s_y=x, fitness_rel_y=predicted,grazing_mean=group),
     data.frame(ggpredict(mod_int_sel_GLMM,
                          terms = c("FFD_s_y [all]","grazing_mean [0.07]")))%>%
       mutate(year=1988)%>%
-      rename(FFD_s_y=x, fitness_rel_y=predicted,grazing_mean=group),
+      dplyr::rename(FFD_s_y=x, fitness_rel_y=predicted,grazing_mean=group),
     data.frame(ggpredict(mod_int_sel_GLMM,
                          terms = c("FFD_s_y [all]","grazing_mean [0.071]")))%>%
       mutate(year=2007)%>%
-      rename(FFD_s_y=x, fitness_rel_y=predicted,grazing_mean=group),
+      dplyr::rename(FFD_s_y=x, fitness_rel_y=predicted,grazing_mean=group),
     data.frame(ggpredict(mod_int_sel_GLMM,
                          terms = c("FFD_s_y [all]","grazing_mean [0.078]")))%>%
       mutate(year=2012)%>%
-      rename(FFD_s_y=x, fitness_rel_y=predicted,grazing_mean=group),
+      dplyr::rename(FFD_s_y=x, fitness_rel_y=predicted,grazing_mean=group),
     data.frame(ggpredict(mod_int_sel_GLMM,
                          terms = c("FFD_s_y [all]","grazing_mean [0.129]")))%>%
       mutate(year=2009)%>%
-      rename(FFD_s_y=x, fitness_rel_y=predicted,grazing_mean=group),
+      dplyr::rename(FFD_s_y=x, fitness_rel_y=predicted,grazing_mean=group),
     data.frame(ggpredict(mod_int_sel_GLMM,
                          terms = c("FFD_s_y [all]","grazing_mean [0.134]")))%>%
       mutate(year=1991)%>%
-      rename(FFD_s_y=x, fitness_rel_y=predicted,grazing_mean=group),
+      dplyr::rename(FFD_s_y=x, fitness_rel_y=predicted,grazing_mean=group),
     data.frame(ggpredict(mod_int_sel_GLMM,
                          terms = c("FFD_s_y [all]","grazing_mean [0.242]")))%>%
       mutate(year=2015)%>%
-      rename(FFD_s_y=x, fitness_rel_y=predicted,grazing_mean=group),
+      dplyr::rename(FFD_s_y=x, fitness_rel_y=predicted,grazing_mean=group),
     data.frame(ggpredict(mod_int_sel_GLMM,
                          terms = c("FFD_s_y [all]","grazing_mean [0.258]")))%>%
       mutate(year=2006)%>%
-      rename(FFD_s_y=x, fitness_rel_y=predicted,grazing_mean=group),
+      dplyr::rename(FFD_s_y=x, fitness_rel_y=predicted,grazing_mean=group),
     data.frame(ggpredict(mod_int_sel_GLMM,
                          terms = c("FFD_s_y [all]","grazing_mean [0.26]")))%>%
       mutate(year=2016)%>%
-      rename(FFD_s_y=x, fitness_rel_y=predicted,grazing_mean=group),
+      dplyr::rename(FFD_s_y=x, fitness_rel_y=predicted,grazing_mean=group),
     data.frame(ggpredict(mod_int_sel_GLMM,
                          terms = c("FFD_s_y [all]","grazing_mean [0.261]")))%>%
       mutate(year=1994)%>%
-      rename(FFD_s_y=x, fitness_rel_y=predicted,grazing_mean=group),
+      dplyr::rename(FFD_s_y=x, fitness_rel_y=predicted,grazing_mean=group),
     data.frame(ggpredict(mod_int_sel_GLMM,
                          terms = c("FFD_s_y [all]","grazing_mean [0.756]")))%>%
       mutate(year=2017)%>%
-      rename(FFD_s_y=x, fitness_rel_y=predicted,grazing_mean=group)
+      dplyr::rename(FFD_s_y=x, fitness_rel_y=predicted,grazing_mean=group)
   )
 ```
 
@@ -1279,11 +1455,12 @@ ggplot(data=subset(data_grazing_cats))+
                 fill=as.numeric(as.character(grazing_mean))),alpha=0.3)+
   my_theme()+scale_color_viridis(direction = -1)+
   scale_fill_viridis(direction = -1)+
-  theme(legend.position="top")+labs(colour="Yearly mean grazing")+
-  xlab("First flowering date")+ylab("Preditect fitness (number of intact seeds)")+
+  theme(legend.position="top")+labs(colour="Mean grazing probability")+
+  xlab("First flowering date")+
+  ylab("Predicted fitness (number of intact seeds)")+
   theme(strip.text.x=element_text(margin=margin(2,0,2,0)))+
   guides(fill=FALSE)
-ggsave(filename="output/figures/AppendixS4_A.tiff",device="tiff",width=168,
+ggsave(filename="output/figures/AppendixS5_A.tiff",device="tiff",width=168,
        height=210,units="mm",dpi=300,compression="lzw")
 
 ggplot(data=subset(data_grazing_cats))+
@@ -1298,11 +1475,12 @@ ggplot(data=subset(data_grazing_cats))+
                   fill=as.numeric(as.character(grazing_mean))),alpha=0.3)+
   my_theme()+scale_color_viridis(direction = -1)+
   scale_fill_viridis(direction = -1)+
-  theme(legend.position="top")+labs(colour="Yearly mean grazing")+
-  xlab("First flowering date")+ylab("Predicted fitness (number of intact seeds)")+
+  theme(legend.position="top")+labs(colour="Mean grazing probability")+
+  xlab("First flowering date")+
+  ylab("Predicted fitness (number of intact seeds)")+
   theme(strip.text.x=element_text(margin=margin(2,0,2,0)))+
   guides(fill=FALSE)
-ggsave(filename="output/figures/AppendixS4_B.tiff",device="tiff",width=168,
+ggsave(filename="output/figures/AppendixS5_B.tiff",device="tiff",width=168,
        height=210,units="mm",dpi=300,compression="lzw")
 ```
 
@@ -1329,7 +1507,7 @@ ggsave(filename="output/figures/Appendix_X.tiff",
 summary(lm(mean_FFD~fl_freq,data=data_fl_freq))
 ```
 
-# Effects of variance in temperatures on interactions
+# Effects of variance in temperatures on interactions (not used)
 
 ```{r message=FALSE, warning=FALSE}
 temp_variance<-read.table("data/temp_variance.csv",
